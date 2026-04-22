@@ -206,6 +206,18 @@
   box-shadow: var(--accent-glow);
 }
 
+.btn-secondary {
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-surface-3);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
 .btn-cta::before {
   content: "●";
   color: var(--success);
@@ -224,6 +236,49 @@
   display: grid;
   gap: 0.6rem;
   grid-template-columns: 1fr 1fr;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-surface-2);
+  padding: 0.75rem;
+}
+
+.control-group.grid2 {
+  display: grid;
+}
+
+.gsd-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.gsd-row input {
+  flex: 1;
+}
+
+.gsd-unit {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.gsd-nudges {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.gsd-nudges .btn {
+  width: auto;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
 }
 
 .preview {

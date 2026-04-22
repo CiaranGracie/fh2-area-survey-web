@@ -509,9 +509,11 @@ def launch_gui():
     clv=StringVar(value="Ortho"); hmv=StringVar(value="AGL"); shv=StringVar(value="Distance")
     fiv=StringVar(value="Return to Home"); dtv=StringVar(value="AHD")
     av,sv=DoubleVar(value=120),DoubleVar(value=12); tv,crv=DoubleVar(value=15),DoubleVar(value=0)
+    gsd_var=DoubleVar(value=gsd(120,CAMS[cmv.get()]))
     thv,rhv=DoubleVar(value=120),DoubleVar(value=100); fov,sov=IntVar(value=80),IntVar(value=70)
     mv,tiv=IntVar(value=0),DoubleVar(value=100); sov2,rv=BooleanVar(),BooleanVar()
     ev,gv,bv=BooleanVar(value=True),BooleanVar(value=True),BooleanVar(value=True)
+    _updating=False
 
     def sec(t):
         f=LabelFrame(sf,text=t,bg=CD,fg=AC,font=("Segoe UI",10,"bold"),padx=10,pady=6,relief=GROOVE,bd=1)
@@ -541,12 +543,55 @@ def launch_gui():
     ob.pack(side=LEFT,expand=True,fill=X,padx=2)
     ib=Button(cf,text="Oblique",command=lambda:sc("Oblique"),bg=EB,fg="white",font=("Segoe UI",9),relief="flat",padx=16)
     ib.pack(side=LEFT,expand=True,fill=X,padx=2)
-    gl=Label(f,text="— cm/px",bg=CD,fg=AC,font=("Segoe UI",11,"bold")); gl.grid(row=2,column=0,columnspan=2,pady=2)
-    def ug(*_):
-        try: gl.config(text=f"{gsd(av.get(),CAMS[cmv.get()]):.2f} cm/px")
+    lb(f,"GSD:",2)
+    gsd_frame=Frame(f,bg=CD); gsd_frame.grid(row=2,column=1,sticky=E,pady=2)
+    Entry(gsd_frame,textvariable=gsd_var,bg=EB,fg=FG,insertbackground=FG,font=("Segoe UI",9),
+          width=8,relief="flat",bd=2).pack(side=LEFT)
+    Label(gsd_frame,text="cm/px",bg=CD,fg=AC,font=("Segoe UI",9,"bold")).pack(side=LEFT,padx=(4,0))
+    nudges=Frame(f,bg=CD); nudges.grid(row=3,column=0,columnspan=2,sticky=W,pady=(2,0))
+
+    def _nudge_gsd(delta):
+        nonlocal _updating
+        try:
+            g=max(float(gsd_var.get())+delta,0.01)
+            _updating=True
+            gsd_var.set(round(g,2))
         except: pass
-    av.trace_add("write",ug); cmv.trace_add("write",ug)
-    Checkbutton(f,text="Smart Oblique",variable=sov2,bg=CD,fg=FG,selectcolor=EB,font=("Segoe UI",9)).grid(row=3,column=0,columnspan=2,sticky=W)
+        finally:
+            _updating=False
+            _set_altitude_from_gsd()
+
+    for txt,delta in [("-1",-1.0),("-0.1",-0.1),("+0.1",0.1),("+1",1.0)]:
+        Button(nudges,text=txt,command=lambda d=delta:_nudge_gsd(d),bg=EB,fg=FG,font=("Segoe UI",8),
+               relief="flat",padx=6).pack(side=LEFT,padx=1)
+
+    def _set_gsd_from_altitude():
+        nonlocal _updating
+        if _updating: return
+        try:
+            c=CAMS[cmv.get()]; a=max(float(av.get()),0.01)
+            _updating=True
+            gsd_var.set(round(gsd(a,c),2))
+        except: pass
+        finally:
+            _updating=False
+
+    def _set_altitude_from_gsd(*_):
+        nonlocal _updating
+        if _updating: return
+        try:
+            c=CAMS[cmv.get()]; g=max(float(gsd_var.get()),0.01)
+            _updating=True
+            av.set(round(alt_gsd(g,c),2))
+            gsd_var.set(round(g,2))
+        except: pass
+        finally:
+            _updating=False
+
+    def _on_altitude_change(*_): _set_gsd_from_altitude()
+    def _on_camera_change(*_): _set_gsd_from_altitude()
+    av.trace_add("write",_on_altitude_change); cmv.trace_add("write",_on_camera_change); gsd_var.trace_add("write",_set_altitude_from_gsd)
+    Checkbutton(f,text="Smart Oblique",variable=sov2,bg=CD,fg=FG,selectcolor=EB,font=("Segoe UI",9)).grid(row=4,column=0,columnspan=2,sticky=W)
 
     f=sec("Altitude")
     mf=Frame(f,bg=CD); mf.grid(row=0,column=0,columnspan=2,sticky="ew",pady=2)
@@ -596,12 +641,17 @@ def launch_gui():
 
     def mkp():
         fm={"Return to Home":"goHome","Auto Land":"autoLand","Hover":"goContinue"}
+        gsd_override=None
+        try:
+            gv=float(gsd_var.get())
+            gsd_override=gv if gv>0 else None
+        except: pass
         return SP(alt=av.get(),hm=hmv.get(),tf=hmv.get()=="AGL" and not rv.get(),rttf=rv.get(),
             coll="oblique" if clv.get()=="Oblique" else "ortho",so=sov2.get(),
             fov=float(fov.get()),sov=float(sov.get()),course=crv.get(),speed=sv.get(),
             margin=float(mv.get()),shoot="time" if shv.get()=="Time" else "distance",elev_opt=ev.get(),
             toff_h=thv.get(),rth_h=rhv.get(),tspd=tv.get(),finish=fm.get(fiv.get(),"goHome"),
-            gz=gv.get(),bypass=bv.get(),dsm=dv.get() or None,ti=tiv.get(),cam_key=cmv.get())
+            gz=gv.get(),bypass=bv.get(),dsm=dv.get() or None,ti=tiv.get(),gsd_ov=gsd_override,cam_key=cmv.get())
 
     def do_gen():
         print("\n[GENERATE] ══════════════════════════════════════")
@@ -613,7 +663,7 @@ def launch_gui():
         print(f"[GENERATE] KML: {kv.get()}")
         print(f"[GENERATE] DSM: {p.dsm or 'None'}")
         print(f"[GENERATE] Output: {out}")
-        print(f"[GENERATE] Mode: {p.coll} | SmartOblique: {p.so} | Alt: {p.alt}m {p.hm} | Course: {p.course}°")
+        print(f"[GENERATE] Mode: {p.coll} | SmartOblique: {p.so} | Alt: {p.alt}m {p.hm} | GSD: {gsd(p.alt,CAMS[p.cam_key]):.2f} cm/px | Course: {p.course}°")
         print(f"[GENERATE] Overlap: fwd={p.fov}% side={p.sov}% | Speed: {p.speed}m/s | Shoot: {p.shoot}")
         print(f"[GENERATE] Geozone bypass: {p.gz} | Obstacle bypass: {p.bypass}")
         try:
@@ -637,7 +687,7 @@ def launch_gui():
         try:
             p=mkp(); c=CAMS[p.cam_key]
             print(f"[PREVIEW] KML: {kv.get()}")
-            print(f"[PREVIEW] Mode: {p.coll} | SmartOblique: {p.so} | Alt: {p.alt}m | Course: {p.course}°")
+            print(f"[PREVIEW] Mode: {p.coll} | SmartOblique: {p.so} | Alt: {p.alt}m | GSD: {gsd(p.alt,CAMS[p.cam_key]):.2f} cm/px | Course: {p.course}°")
             poly=parse_kml(kv.get())
             print(f"[PREVIEW] Polygon parsed: {len(poly)} vertices")
             cx,cy=poly[:,0].mean(),poly[:,1].mean(); ep,cn=det_epsg(cx,cy)
@@ -680,7 +730,7 @@ def launch_gui():
 
     Button(sf,text="▶  Generate Survey Route",command=do_gen,bg="#10b981",fg="white",font=("Segoe UI",12,"bold"),relief="flat",padx=20,pady=10,cursor="hand2").pack(fill=X,padx=10,pady=8)
     Button(sf,text="👁  Preview Flight Lines",command=do_prev,bg="#6366f1",fg="white",font=("Segoe UI",10),relief="flat",padx=16,pady=6,cursor="hand2").pack(fill=X,padx=10,pady=(0,10))
-    ug(); root.mainloop()
+    _set_gsd_from_altitude(); root.mainloop()
 
 # ══════════════════════════════════════════════════════════════════════
 if __name__=="__main__":

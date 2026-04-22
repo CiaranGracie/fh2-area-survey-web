@@ -1,8 +1,9 @@
-﻿import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { CAMERAS } from "./domain/cameras";
 import { DEFAULT_PARAMS } from "./domain/defaults";
 import type { LonLat, SurveyParams, SurveyResult } from "./domain/types";
+import { altitudeFromGsd, gsdCm } from "./geo/math";
 import { buildKmzBlob, triggerBlobDownload } from "./io/kmzWriter";
 import { parseKmlOrKmzFile } from "./io/kml";
 import { generateSurvey } from "./mission/generate";
@@ -32,6 +33,10 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>("Load a KML/KMZ to begin.");
   const [downloadName, setDownloadName] = useState("fh2_route.kmz");
+  const [gsdInput, setGsdInput] = useState(() =>
+    gsdCm(DEFAULT_PARAMS.altitudeM, CAMERAS[DEFAULT_PARAMS.cameraKey]).toFixed(2),
+  );
+  const syncingFromGsdRef = useRef(false);
 
   const passLabels = useMemo(
     () => surveyResult?.passes.map((p) => p.label).join(" | ") ?? "No passes yet",
@@ -62,6 +67,33 @@ function App() {
       realTimeTerrainFollow: checked,
       terrainFollow: prev.heightMode === "AGL" ? !checked : false,
     }));
+  };
+
+  useEffect(() => {
+    const camera = CAMERAS[params.cameraKey];
+    if (!camera) return;
+    const nextGsd = gsdCm(params.altitudeM, camera).toFixed(2);
+    setGsdInput(nextGsd);
+    syncingFromGsdRef.current = false;
+  }, [params.altitudeM, params.cameraKey]);
+
+  const onChangeGsd = (value: string) => {
+    setGsdInput(value);
+    const next = Number(value);
+    const camera = CAMERAS[params.cameraKey];
+    if (!camera || !Number.isFinite(next) || next <= 0) return;
+    syncingFromGsdRef.current = true;
+    const nextAltitude = altitudeFromGsd(next, camera);
+    setParams((prev) => ({ ...prev, altitudeM: Math.max(0.01, Number(nextAltitude.toFixed(2))) }));
+  };
+
+  const nudgeGsd = (delta: number) => {
+    const base = Number(gsdInput);
+    const camera = CAMERAS[params.cameraKey];
+    if (!camera) return;
+    const current = Number.isFinite(base) && base > 0 ? base : gsdCm(params.altitudeM, camera);
+    const next = Math.max(0.01, Number((current + delta).toFixed(2)));
+    onChangeGsd(next.toFixed(2));
   };
 
   const onLoadPolygon = async () => {
@@ -148,43 +180,57 @@ function App() {
             Load Polygon
           </button>
 
-          <h3>Collection</h3>
-          <label>
-            Mode
-            <select
-              value={params.collectionMode}
-              onChange={(e) =>
-                updateString("collectionMode", e.target.value as SurveyParams["collectionMode"])
-              }
-            >
-              <option value="ortho">Ortho</option>
-              <option value="oblique">Oblique</option>
-            </select>
-          </label>
-          <label className="toggle-label">
-            Smart oblique
-            <input
-              type="checkbox"
-              checked={params.smartOblique}
-              onChange={(e) => updateString("smartOblique", e.target.checked)}
-            />
-          </label>
-          <label>
-            Camera
-            <select
-              value={params.cameraKey}
-              onChange={(e) => updateString("cameraKey", e.target.value)}
-            >
-              {Object.keys(CAMERAS).map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
-          </label>
+          <h3>Acquisition</h3>
+          <div className="control-group">
+            <label>
+              Camera
+              <select
+                value={params.cameraKey}
+                onChange={(e) => updateString("cameraKey", e.target.value)}
+              >
+                {Object.keys(CAMERAS).map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Mode
+              <select
+                value={params.collectionMode}
+                onChange={(e) =>
+                  updateString("collectionMode", e.target.value as SurveyParams["collectionMode"])
+                }
+              >
+                <option value="ortho">Ortho</option>
+                <option value="oblique">Oblique</option>
+              </select>
+            </label>
+            <label>
+              Photo mode
+              <select
+                value={params.shootType}
+                onChange={(e) =>
+                  updateString("shootType", e.target.value as SurveyParams["shootType"])
+                }
+              >
+                <option value="distance">Distance</option>
+                <option value="time">Time</option>
+              </select>
+            </label>
+            <label className="toggle-label">
+              Smart oblique
+              <input
+                type="checkbox"
+                checked={params.smartOblique}
+                onChange={(e) => updateString("smartOblique", e.target.checked)}
+              />
+            </label>
+          </div>
 
-          <h3>Flight Parameters</h3>
-          <div className="grid2">
+          <h3>Flight</h3>
+          <div className="control-group grid2">
             <label>
               Height mode
               <select
@@ -214,14 +260,6 @@ function App() {
               />
             </label>
             <label>
-              Course (deg)
-              <input
-                type="number"
-                value={params.courseDeg}
-                onChange={(e) => updateNumber("courseDeg", e.target.value)}
-              />
-            </label>
-            <label>
               Speed (m/s)
               <input
                 type="number"
@@ -230,51 +268,88 @@ function App() {
               />
             </label>
             <label>
-              Forward overlap (%)
+              Course (deg)
               <input
                 type="number"
-                value={params.forwardOverlapPct}
-                onChange={(e) => updateNumber("forwardOverlapPct", e.target.value)}
+                value={params.courseDeg}
+                onChange={(e) => updateNumber("courseDeg", e.target.value)}
               />
             </label>
-            <label>
-              Side overlap (%)
+            <label className="toggle-label">
+              Elevation optimization
               <input
-                type="number"
-                value={params.sideOverlapPct}
-                onChange={(e) => updateNumber("sideOverlapPct", e.target.value)}
+                type="checkbox"
+                checked={params.elevationOptimize}
+                onChange={(e) => updateString("elevationOptimize", e.target.checked)}
               />
             </label>
           </div>
 
-          <label>
-            Photo mode
-            <select
-              value={params.shootType}
-              onChange={(e) =>
-                updateString("shootType", e.target.value as SurveyParams["shootType"])
-              }
-            >
-              <option value="distance">Distance</option>
-              <option value="time">Time</option>
-            </select>
-          </label>
-
-          <label className="toggle-label">
-            Elevation optimization
-            <input
-              type="checkbox"
-              checked={params.elevationOptimize}
-              onChange={(e) => updateString("elevationOptimize", e.target.checked)}
-            />
-          </label>
+          <h3>Coverage</h3>
+          <div className="control-group">
+            <label>
+              GSD
+              <div className="gsd-row">
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={gsdInput}
+                  onChange={(e) => onChangeGsd(e.target.value)}
+                  onBlur={() => {
+                    const parsed = Number(gsdInput);
+                    if (Number.isFinite(parsed) && parsed > 0) {
+                      setGsdInput(parsed.toFixed(2));
+                    } else {
+                      const camera = CAMERAS[params.cameraKey];
+                      if (!camera) return;
+                      setGsdInput(gsdCm(params.altitudeM, camera).toFixed(2));
+                    }
+                  }}
+                />
+                <span className="gsd-unit">cm/px</span>
+              </div>
+              <div className="gsd-nudges">
+                <button className="btn btn-secondary" type="button" onClick={() => nudgeGsd(-1)}>
+                  -1
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => nudgeGsd(-0.1)}>
+                  -0.1
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => nudgeGsd(0.1)}>
+                  +0.1
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => nudgeGsd(1)}>
+                  +1
+                </button>
+              </div>
+            </label>
+            <div className="grid2">
+              <label>
+                Forward overlap (%)
+                <input
+                  type="number"
+                  value={params.forwardOverlapPct}
+                  onChange={(e) => updateNumber("forwardOverlapPct", e.target.value)}
+                />
+              </label>
+              <label>
+                Side overlap (%)
+                <input
+                  type="number"
+                  value={params.sideOverlapPct}
+                  onChange={(e) => updateNumber("sideOverlapPct", e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
 
           <button className="btn btn-primary btn-cta" onClick={onGenerate} disabled={busy || !polygon}>
             {busy ? "Working..." : "Generate Route"}
           </button>
 
-          <h3>Export</h3>
-          <div className="grid2">
+          <h3>Safety</h3>
+          <div className="control-group grid2">
             <label className="toggle-label">
               Geozone bypass
               <input
@@ -292,20 +367,24 @@ function App() {
               />
             </label>
           </div>
-          <label>
-            Output filename
-            <input
-              value={downloadName}
-              onChange={(e) => setDownloadName(e.target.value)}
-            />
-          </label>
-          <button
-            className="btn btn-primary btn-cta"
-            onClick={onDownloadKmz}
-            disabled={!surveyResult || busy}
-          >
-            Download KMZ
-          </button>
+
+          <h3>Export</h3>
+          <div className="control-group">
+            <label>
+              Output filename
+              <input
+                value={downloadName}
+                onChange={(e) => setDownloadName(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn btn-primary btn-cta"
+              onClick={onDownloadKmz}
+              disabled={!surveyResult || busy}
+            >
+              Download KMZ
+            </button>
+          </div>
 
           <div className="message">{message}</div>
         </aside>
