@@ -169,24 +169,6 @@ function App() {
               onChange={(e) => updateString("smartOblique", e.target.checked)}
             />
           </label>
-          <div className="grid2">
-            <label>
-              Smart oblique pitch (deg)
-              <input
-                type="number"
-                value={params.smartObliquePitch}
-                onChange={(e) => updateNumber("smartObliquePitch", e.target.value)}
-              />
-            </label>
-            <label>
-              Oblique pitch (deg)
-              <input
-                type="number"
-                value={params.obliquePitch}
-                onChange={(e) => updateNumber("obliquePitch", e.target.value)}
-              />
-            </label>
-          </div>
           <label>
             Camera
             <select
@@ -263,14 +245,6 @@ function App() {
                 onChange={(e) => updateNumber("sideOverlapPct", e.target.value)}
               />
             </label>
-            <label>
-              Margin (m)
-              <input
-                type="number"
-                value={params.marginM}
-                onChange={(e) => updateNumber("marginM", e.target.value)}
-              />
-            </label>
           </div>
 
           <label>
@@ -301,51 +275,6 @@ function App() {
 
           <h3>Export</h3>
           <div className="grid2">
-            <label>
-              Takeoff height (m)
-              <input
-                type="number"
-                value={params.takeoffHeightM}
-                onChange={(e) => updateNumber("takeoffHeightM", e.target.value)}
-              />
-            </label>
-            <label>
-              RTH height (m)
-              <input
-                type="number"
-                value={params.rthHeightM}
-                onChange={(e) => updateNumber("rthHeightM", e.target.value)}
-              />
-            </label>
-            <label>
-              Transit speed (m/s)
-              <input
-                type="number"
-                value={params.transitSpeedMps}
-                onChange={(e) => updateNumber("transitSpeedMps", e.target.value)}
-              />
-            </label>
-            <label>
-              On completion
-              <select
-                value={params.finishAction}
-                onChange={(e) =>
-                  updateString("finishAction", e.target.value as SurveyParams["finishAction"])
-                }
-              >
-                <option value="goHome">Return to Home</option>
-                <option value="autoLand">Auto Land</option>
-                <option value="goContinue">Hover</option>
-              </select>
-            </label>
-            <label>
-              Terrain WP interval (m)
-              <input
-                type="number"
-                value={params.terrainIntervalM}
-                onChange={(e) => updateNumber("terrainIntervalM", e.target.value)}
-              />
-            </label>
             <label className="toggle-label">
               Geozone bypass
               <input
