@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CAMERAS } from "../domain/cameras";
 import { DEFAULT_WAYPOINT_PARAMS } from "../domain/defaults";
-import type { Waypoint, WaypointAction } from "../domain/types";
+import type { Waypoint } from "../domain/types";
 import { createAction } from "../domain/actions";
 import { buildWaypointTemplateKml, buildWaypointWaylinesWpml } from "./waypointXmlBuilders";
 
