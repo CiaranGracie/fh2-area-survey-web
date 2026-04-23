@@ -32,6 +32,7 @@ export interface SurveyParams {
   speedMps: number;
   obliqueSpeedMps: number;
   marginM: number;
+  minLines: number;
   shootType: "distance" | "time";
   elevationOptimize: boolean;
   takeoffHeightM: number;
@@ -69,6 +70,7 @@ export interface PassLine {
 export interface SurveyResult {
   stats: SurveyStats;
   polygon: LonLat[];
+  surveyPolygon: LonLat[];
   passes: PassLine[];
   wpml: string;
   templateKml: string;

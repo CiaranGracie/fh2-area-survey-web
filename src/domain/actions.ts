@@ -107,7 +107,6 @@ export const ACTION_CATALOGUE: ActionCatalogueEntry[] = [
     hasLens: false,
     defaultParams: {
       focalLength: 24,
-      isUseFocalFactor: 0,
       payloadPositionIndex: 0,
     },
   },

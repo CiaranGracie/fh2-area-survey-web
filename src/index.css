@@ -68,8 +68,8 @@ body {
 }
 
 #root {
-  max-width: 1360px;
-  margin: 0 auto;
+  height: 100vh;
+  overflow: hidden;
 }
 
 input,

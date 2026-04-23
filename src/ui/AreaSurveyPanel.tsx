@@ -16,6 +16,7 @@ type NumberParamKey =
   | "obliqueForwardOverlapPct"
   | "obliqueSideOverlapPct"
   | "marginM"
+  | "minLines"
   | "courseDeg"
   | "speedMps"
   | "obliqueSpeedMps"
@@ -70,7 +71,6 @@ export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
 
   const showPhotoMode = mode.orthoPlain || mode.obliquePlain;
   const showElevationOpt = mode.orthoPlain || mode.orthoSmart;
-  const showMargin = mode.orthoPlain || mode.obliquePlain;
   const showObliqueGsd = mode.obliquePlain || mode.obliqueSmart;
   const showGimbalControl = mode.obliquePlain || mode.obliqueSmart;
   const showObliqueOverlaps = mode.obliquePlain;
@@ -487,16 +487,27 @@ export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
             </label>
           </div>
         )}
-        {showMargin && (
+        <div className="grid2">
           <label>
             Margin (m)
             <input
               type="number"
+              min={0}
               value={params.marginM}
               onChange={(e) => updateNumber("marginM", e.target.value)}
             />
           </label>
-        )}
+          <label>
+            Min flight lines
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={params.minLines}
+              onChange={(e) => updateNumber("minLines", e.target.value)}
+            />
+          </label>
+        </div>
       </div>
 
       <button className="btn btn-primary btn-cta" onClick={onGenerate} disabled={busy || !polygon}>

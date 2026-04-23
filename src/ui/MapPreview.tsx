@@ -4,6 +4,7 @@ import type { LonLat, PassLine, Waypoint } from "../domain/types";
 
 interface MapPreviewProps {
   polygon: LonLat[] | null;
+  surveyPolygon?: LonLat[] | null;
   passes: PassLine[];
   waypoints?: Waypoint[];
   selectedWaypointId?: string | null;
@@ -11,9 +12,13 @@ interface MapPreviewProps {
 }
 
 const POLYGON_STYLE = { color: "#2dd4bf", weight: 2 };
-const SELECTED_WP_STYLE = { radius: 8, color: "#fbbf24", fillColor: "#fbbf24", fillOpacity: 0.9, weight: 2 };
-const WP_STYLE = { radius: 6, color: "#60a5fa", fillColor: "#60a5fa", fillOpacity: 0.8, weight: 1.5 };
-
+const SURVEY_POLYGON_STYLE = {
+  color: "#f59e0b",
+  weight: 1.5,
+  dashArray: "8 5",
+  fillColor: "#f59e0b",
+  fillOpacity: 0.04,
+};
 function createArrowIcon(color: string, angle: number): L.DivIcon {
   return L.divIcon({
     html: `<svg width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(${angle}deg)">
@@ -35,25 +40,31 @@ function bearingDeg(a: LonLat, b: LonLat): number {
 }
 
 function createNumberedIcon(index: number, selected: boolean): L.DivIcon {
-  const bg = selected ? "#fbbf24" : "#60a5fa";
-  const fg = selected ? "#000" : "#fff";
+  const size = selected ? 36 : 28;
+  const half = size / 2;
+  const fontSize = selected ? 14 : 12;
+  const shadow = selected
+    ? "box-shadow:0 0 12px rgba(245,158,11,0.6), 0 2px 6px rgba(0,0,0,0.4);"
+    : "box-shadow:0 1px 4px rgba(0,0,0,0.4);";
   return L.divIcon({
     html: `<div style="
-      width:24px;height:24px;border-radius:50%;
-      background:${bg};color:${fg};
+      width:${size}px;height:${size}px;border-radius:50%;
+      background:#f59e0b;color:#fff;
       display:flex;align-items:center;justify-content:center;
-      font-size:11px;font-weight:600;
+      font-size:${fontSize}px;font-weight:600;
       border:2px solid rgba(255,255,255,0.5);
-      box-shadow:0 1px 4px rgba(0,0,0,0.4);
+      ${shadow}
+      transition:all 0.15s ease;
     ">${index + 1}</div>`,
     className: "numbered-wp-icon",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    iconSize: [size, size],
+    iconAnchor: [half, half],
   });
 }
 
 export function MapPreview({
   polygon,
+  surveyPolygon,
   passes,
   waypoints = [],
   selectedWaypointId,
@@ -89,10 +100,18 @@ export function MapPreview({
 
     group.clearLayers();
 
+    if (surveyPolygon && surveyPolygon.length >= 3 && surveyPolygon !== polygon) {
+      const latLngSurvey = surveyPolygon.map(([lon, lat]) => [lat, lon] as [number, number]);
+      const surveyLayer = L.polygon(latLngSurvey, SURVEY_POLYGON_STYLE).addTo(group);
+      map.fitBounds(surveyLayer.getBounds(), { padding: [30, 30] });
+    }
+
     if (polygon && polygon.length >= 3) {
       const latLngPolygon = polygon.map(([lon, lat]) => [lat, lon] as [number, number]);
       const polygonLayer = L.polygon(latLngPolygon, POLYGON_STYLE).addTo(group);
-      map.fitBounds(polygonLayer.getBounds(), { padding: [24, 24] });
+      if (!surveyPolygon || surveyPolygon === polygon) {
+        map.fitBounds(polygonLayer.getBounds(), { padding: [30, 30] });
+      }
     }
 
     passes.forEach((pass) => {
@@ -160,10 +179,10 @@ export function MapPreview({
       });
 
       if (bounds.length > 0 && !polygon) {
-        map.fitBounds(bounds, { padding: [40, 40] });
+        map.fitBounds(bounds, { padding: [50, 50] });
       }
     }
-  }, [polygon, passes, waypoints, selectedWaypointId, onWaypointClick]);
+  }, [polygon, surveyPolygon, passes, waypoints, selectedWaypointId, onWaypointClick]);
 
   return <div className="map-container" ref={containerRef} />;
 }

@@ -18,6 +18,7 @@ export const DEFAULT_PARAMS: SurveyParams = {
   speedMps: 12,
   obliqueSpeedMps: 15,
   marginM: 0,
+  minLines: 0,
   shootType: "distance",
   elevationOptimize: true,
   takeoffHeightM: 120,

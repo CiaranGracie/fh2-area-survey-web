@@ -46,6 +46,98 @@ function scanlineIntersections(polygonClosed: XY[], y: number): number[] {
   return xs;
 }
 
+/**
+ * Stretch a polygon in the cross-track direction (perpendicular to bearing)
+ * by `extraM` metres total, split evenly to each side.
+ * Works by rotating into flight-aligned space, scaling Y outward, then
+ * rotating back.
+ */
+function stretchCrossTrack(
+  polyXY: XY[],
+  bearingDeg: number,
+  extraM: number,
+): XY[] {
+  if (polyXY.length < 3 || extraM <= 0) return polyXY;
+
+  const center = centroid(polyXY);
+  const angleRad = ((bearingDeg - 90) * Math.PI) / 180;
+  const rotated = polyXY.map((pt) => rotatePoint(pt, center, angleRad));
+
+  const ys = rotated.map((pt) => pt[1]);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const currentSpan = maxY - minY;
+  if (currentSpan < 1e-6) return polyXY;
+
+  const midY = (minY + maxY) / 2;
+  const scale = (currentSpan + extraM) / currentSpan;
+
+  const stretched = rotated.map(
+    (pt) => [pt[0], midY + (pt[1] - midY) * scale] as XY,
+  );
+  return stretched.map((pt) => rotatePoint(pt, center, -angleRad));
+}
+
+/**
+ * Returns the number of scanlines the polygon would naturally produce
+ * at the given bearing and spacing.
+ */
+export function countNaturalLines(
+  polygonLonLat: LonLat[],
+  bearingDeg: number,
+  spacingM: number,
+  projector: Projector,
+): number {
+  const projected = polygonLonLat.map((pt) => projector.forward(pt));
+  if (projected.length < 3) return 0;
+  const center = centroid(projected);
+  const angleRad = ((bearingDeg - 90) * Math.PI) / 180;
+  const rotated = projected.map((pt) => rotatePoint(pt, center, angleRad));
+  const ys = rotated.map((pt) => pt[1]);
+  const minY = Math.min(...ys) - spacingM;
+  const maxY = Math.max(...ys) + spacingM;
+  let count = 0;
+  const closed = ensureClosed(rotated);
+  for (let y = minY + spacingM / 2; y <= maxY; y += spacingM) {
+    if (scanlineIntersections(closed, y).length >= 2) count++;
+  }
+  return count;
+}
+
+/**
+ * Expand a polygon so it produces at least `minLines` flight lines for the
+ * given bearing and spacing.  Stretches only in the cross-track direction
+ * (perpendicular to the flight bearing) so the along-track extent stays the
+ * same.  Returns the original polygon if it already produces enough lines.
+ */
+export function expandPolygonForMinLines(
+  polygonLonLat: LonLat[],
+  bearingDeg: number,
+  spacingM: number,
+  minLines: number,
+  projector: Projector,
+): LonLat[] {
+  if (minLines <= 0) return polygonLonLat;
+
+  const natural = countNaturalLines(polygonLonLat, bearingDeg, spacingM, projector);
+  if (natural >= minLines) return polygonLonLat;
+
+  const projected = polygonLonLat.map((pt) => projector.forward(pt));
+  const center = centroid(projected);
+  const angleRad = ((bearingDeg - 90) * Math.PI) / 180;
+  const rotated = projected.map((pt) => rotatePoint(pt, center, angleRad));
+
+  const ys = rotated.map((pt) => pt[1]);
+  const currentCrossTrack = Math.max(...ys) - Math.min(...ys);
+
+  const requiredCrossTrack = (minLines + 1) * spacingM;
+  const deficit = requiredCrossTrack - currentCrossTrack;
+  if (deficit <= 0) return polygonLonLat;
+
+  const expanded = stretchCrossTrack(projected, bearingDeg, deficit);
+  return expanded.map((pt) => projector.backward(pt));
+}
+
 export function generateLines(
   polygonLonLat: LonLat[],
   bearingDeg: number,
@@ -53,6 +145,7 @@ export function generateLines(
   projector: Projector,
   offsetM = 0,
   offsetBearingDeg = 0,
+  bufferM = 0,
 ): LonLat[][] {
   const projected = polygonLonLat.map((pt) => projector.forward(pt));
   if (projected.length < 3) return [];
@@ -74,8 +167,8 @@ export function generateLines(
   for (let y = minY + spacingM / 2; y <= maxY; y += spacingM) {
     const intersections = scanlineIntersections(closed, y);
     for (let i = 0; i + 1 < intersections.length; i += 2) {
-      const startRot: XY = [intersections[i], y];
-      const endRot: XY = [intersections[i + 1], y];
+      const startRot: XY = [intersections[i] - bufferM, y];
+      const endRot: XY = [intersections[i + 1] + bufferM, y];
       const backStart = rotatePoint(startRot, center, -angleRad);
       const backEnd = rotatePoint(endRot, center, -angleRad);
       result.push([projector.backward(backStart), projector.backward(backEnd)]);

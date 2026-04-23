@@ -6,7 +6,7 @@ import type {
   SurveyParams,
   SurveyResult,
 } from "../domain/types";
-import { addTerrainWaypoints, generateLines } from "../geo/grid";
+import { addTerrainWaypoints, expandPolygonForMinLines, generateLines } from "../geo/grid";
 import { gsdCm, haversineDistanceM, lineSpacingM, photoIntervalM } from "../geo/math";
 import { projectorForLonLat } from "../geo/projection";
 import { buildTemplateKml, buildWaylinesWpml } from "./xmlBuilders";
@@ -64,6 +64,7 @@ function withOffsetPass(
   lineSpacingMeters: number,
   offsetM: number,
   offsetBearingDeg: number,
+  bufferM = 0,
 ) {
   const centerLon = polygon.reduce((acc, pt) => acc + pt[0], 0) / polygon.length;
   const centerLat = polygon.reduce((acc, pt) => acc + pt[1], 0) / polygon.length;
@@ -75,6 +76,7 @@ function withOffsetPass(
     projector,
     offsetM,
     offsetBearingDeg,
+    bufferM,
   );
 }
 
@@ -109,6 +111,10 @@ export async function generateSurvey(
       : 0;
   const perp = (params.courseDeg + 90) % 360;
 
+  const surveyPolygon = expandPolygonForMinLines(
+    polygon, params.courseDeg, spacingM, params.minLines, projector,
+  );
+
   const passLines: PassLine[] = [];
   const folderInputs: WaylineFolderInput[] = [];
 
@@ -121,7 +127,7 @@ export async function generateSurvey(
 
   if (isOrtho && !usesSmartOblique) {
     const lines = maybeDensify(
-      generateLines(polygon, params.courseDeg, spacingM, projector),
+      generateLines(surveyPolygon, params.courseDeg, spacingM, projector, 0, 0, params.marginM),
     );
     passLines.push({ label: "Nadir (-90°)", color: PASS_COLORS.nadir, lines, pitchDeg: -90 });
     const heights = await computeHeights(lines, params, dsmSampler);
@@ -136,7 +142,7 @@ export async function generateSurvey(
     });
   } else if (isOrtho && usesSmartOblique) {
     const lines = maybeDensify(
-      generateLines(polygon, params.courseDeg, spacingM, projector),
+      generateLines(surveyPolygon, params.courseDeg, spacingM, projector, 0, 0, params.marginM),
     );
     passLines.push({ label: "Nadir + Smart", color: PASS_COLORS.smart, lines, pitchDeg: -90 });
     const heights = await computeHeights(lines, params, dsmSampler);
@@ -161,8 +167,8 @@ export async function generateSurvey(
     for (const cfg of passConfigs) {
       const offset = cfg.pitch === -90 ? 0 : obliqueOffset;
       const raw = cfg.pitch === -90
-        ? generateLines(polygon, cfg.bearing, spacingM, projector)
-        : withOffsetPass(polygon, cfg.bearing, spacingM, offset, cfg.offsetBearing);
+        ? generateLines(surveyPolygon, cfg.bearing, spacingM, projector, 0, 0, params.marginM)
+        : withOffsetPass(surveyPolygon, cfg.bearing, spacingM, offset, cfg.offsetBearing, params.marginM);
       const lines = maybeDensify(raw);
       passLines.push({ label: cfg.label, color: cfg.color, lines, pitchDeg: cfg.pitch });
       const heights = await computeHeights(lines, params, dsmSampler);
@@ -178,7 +184,7 @@ export async function generateSurvey(
     }
   } else {
     const lines = maybeDensify(
-      generateLines(polygon, params.courseDeg, spacingM, projector),
+      generateLines(surveyPolygon, params.courseDeg, spacingM, projector, 0, 0, params.marginM),
     );
     passLines.push({ label: "Oblique + Smart", color: PASS_COLORS.smart, lines, pitchDeg: params.obliquePitch });
     const heights = await computeHeights(lines, params, dsmSampler);
@@ -193,7 +199,7 @@ export async function generateSurvey(
     });
   }
 
-  const templateKml = buildTemplateKml(polygon, params, camera);
+  const templateKml = buildTemplateKml(surveyPolygon, params, camera);
   const { wpml, totalDistanceM } = buildWaylinesWpml(folderInputs, params, camera);
 
   const stats = {
@@ -213,6 +219,7 @@ export async function generateSurvey(
   return {
     stats,
     polygon,
+    surveyPolygon,
     passes: passLines,
     wpml,
     templateKml,

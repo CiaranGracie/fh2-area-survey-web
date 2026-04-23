@@ -154,19 +154,23 @@ function ActionParamEditor({
         </>
       );
 
-    case "zoom":
+    case "zoom": {
+      const BASE_FL = 24;
+      const currentZoom = Math.round(Number(action.params.focalLength ?? BASE_FL) / BASE_FL);
       return (
         <label>
-          Focal length (mm)
-          <input
-            type="number"
-            min={24}
-            max={168}
-            value={Number(action.params.focalLength ?? 24)}
-            onChange={(e) => updateParam("focalLength", Number(e.target.value))}
-          />
+          Zoom
+          <select
+            value={currentZoom}
+            onChange={(e) => updateParam("focalLength", Number(e.target.value) * BASE_FL)}
+          >
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((z) => (
+              <option key={z} value={z}>{z}x</option>
+            ))}
+          </select>
         </label>
       );
+    }
 
     case "orientedShoot":
       return (
@@ -202,14 +206,15 @@ function ActionParamEditor({
             />
           </label>
           <label>
-            Focal length (mm)
-            <input
-              type="number"
-              min={24}
-              max={168}
-              value={Number(action.params.focalLength ?? 24)}
-              onChange={(e) => updateParam("focalLength", Number(e.target.value))}
-            />
+            Zoom
+            <select
+              value={Math.round(Number(action.params.focalLength ?? 24) / 24)}
+              onChange={(e) => updateParam("focalLength", Number(e.target.value) * 24)}
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((z) => (
+                <option key={z} value={z}>{z}x</option>
+              ))}
+            </select>
           </label>
           {lensSelector}
         </>
