@@ -454,6 +454,337 @@ tr:hover td {
   color: var(--accent);
 }
 
+/* Mode switcher */
+.mode-switcher {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.mode-switcher .btn {
+  padding: 0.45rem 1rem;
+  font-size: 0.82rem;
+}
+
+/* Pass legend */
+.pass-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* Waypoint list header */
+.waypoint-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.waypoint-list-header h3 {
+  margin: 0;
+}
+
+/* Waypoint card list */
+.waypoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.waypoint-card {
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-surface-2);
+  overflow: hidden;
+}
+
+.waypoint-card.expanded {
+  border-color: var(--accent);
+}
+
+.waypoint-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.waypoint-card-header:hover {
+  background: var(--bg-surface-3);
+}
+
+.waypoint-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--info);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.waypoint-name {
+  flex: 1;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waypoint-actions-count {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+.waypoint-card-controls {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.waypoint-card-body {
+  padding: 0.85rem;
+  border-top: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.waypoint-action-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.action-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--pill-blue-bg);
+  color: var(--pill-blue-text);
+  border: 1px solid var(--pill-blue-text);
+}
+
+/* Action editor */
+.action-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.action-empty {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.action-item {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.action-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.action-item-index {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  width: 1.2rem;
+  text-align: center;
+}
+
+.action-item-label {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.action-item-controls {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.action-move-btn,
+.action-remove-btn {
+  width: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  font-size: 0.68rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 4px !important;
+}
+
+.action-remove-btn {
+  color: var(--danger) !important;
+  border-color: var(--danger) !important;
+}
+
+.action-item-params {
+  padding: 0 0.6rem 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.action-item-params label {
+  font-size: 0.76rem;
+}
+
+.action-item-params input,
+.action-item-params select {
+  font-size: 0.82rem;
+  padding: 0.35rem 0.55rem;
+}
+
+/* Action palette */
+.action-palette h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.action-palette-category {
+  margin-bottom: 0.4rem;
+}
+
+.action-palette-category-label {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.action-palette-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+}
+
+.action-palette-btn {
+  padding: 0.25rem 0.55rem !important;
+  font-size: 0.7rem !important;
+  border-radius: 999px !important;
+}
+
+/* Action popout panel */
+@keyframes popoutSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.action-popout {
+  position: relative;
+  width: 100%;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  padding: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  animation: popoutSlideDown 0.2s ease-out;
+}
+
+.action-popout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.action-popout-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-popout .action-editor {
+  font-size: 0.85rem;
+}
+
+.action-trigger-badge {
+  font-size: 0.66rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--pill-teal-bg);
+  color: var(--pill-teal-text);
+  border: 1px solid var(--pill-teal-text);
+  white-space: nowrap;
+}
+
+/* Arrow icon on map */
+.arrow-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.numbered-wp-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
 @media (max-width: 980px) {
   .layout {
     grid-template-columns: 1fr;

@@ -10,6 +10,7 @@ import { addTerrainWaypoints, generateLines } from "../geo/grid";
 import { gsdCm, haversineDistanceM, lineSpacingM, photoIntervalM } from "../geo/math";
 import { projectorForLonLat } from "../geo/projection";
 import { buildTemplateKml, buildWaylinesWpml } from "./xmlBuilders";
+import type { WaylineFolderInput } from "./xmlBuilders";
 import type { DsmSampler } from "../terrain/dsm";
 
 const PASS_COLORS = {
@@ -31,6 +32,17 @@ function flattenLines(lines: LonLat[][], heights: number[]): LonLatAlt[] {
     }
   }
   return out;
+}
+
+function computeLineBreaks(lines: LonLat[][]): number[] {
+  const breaks: number[] = [];
+  let wpIdx = 0;
+  for (const line of lines) {
+    wpIdx += line.length;
+    breaks.push(wpIdx - 1);
+  }
+  if (breaks.length > 0) breaks.pop();
+  return breaks;
 }
 
 async function computeHeights(
@@ -98,58 +110,95 @@ export async function generateSurvey(
   const perp = (params.courseDeg + 90) % 360;
 
   const passLines: PassLine[] = [];
-  let waylineSet: LonLat[][][] = [];
+  const folderInputs: WaylineFolderInput[] = [];
 
   const maybeDensify = (input: LonLat[][]): LonLat[][] =>
     params.elevationOptimize ? addTerrainWaypoints(input, params.terrainIntervalM, projector) : input;
 
-  if (params.collectionMode === "ortho" && !params.smartOblique) {
+  const isOrtho = params.collectionMode === "ortho";
+  const isOblique = params.collectionMode === "oblique";
+  const usesSmartOblique = params.smartOblique;
+
+  if (isOrtho && !usesSmartOblique) {
     const lines = maybeDensify(
       generateLines(polygon, params.courseDeg, spacingM, projector),
     );
-    waylineSet = [lines];
     passLines.push({ label: "Nadir (-90°)", color: PASS_COLORS.nadir, lines, pitchDeg: -90 });
-  } else if (params.collectionMode === "ortho" && params.smartOblique) {
+    const heights = await computeHeights(lines, params, dsmSampler);
+    folderInputs.push({
+      waypoints: flattenLines(lines, heights),
+      pitchDeg: -90,
+      speedMps: params.speedMps,
+      photoIntervalM: intervalM,
+      imageFormat: camera.imageFormat,
+      isSmartOblique: false,
+      lineBreaks: computeLineBreaks(lines),
+    });
+  } else if (isOrtho && usesSmartOblique) {
     const lines = maybeDensify(
       generateLines(polygon, params.courseDeg, spacingM, projector),
     );
-    waylineSet = [lines];
     passLines.push({ label: "Nadir + Smart", color: PASS_COLORS.smart, lines, pitchDeg: -90 });
-  } else if (params.collectionMode === "oblique" && !params.smartOblique) {
-    const nadir = maybeDensify(
-      generateLines(polygon, params.courseDeg, spacingM, projector),
-    );
-    const east = maybeDensify(withOffsetPass(polygon, params.courseDeg, spacingM, obliqueOffset, 90));
-    const south = maybeDensify(withOffsetPass(polygon, perp, spacingM, obliqueOffset, 180));
-    const west = maybeDensify(withOffsetPass(polygon, params.courseDeg, spacingM, obliqueOffset, 270));
-    const north = maybeDensify(withOffsetPass(polygon, perp, spacingM, obliqueOffset, 0));
-    waylineSet = [nadir, east, south, west, north];
-    passLines.push({ label: "Nadir (-90°)", color: PASS_COLORS.nadir, lines: nadir, pitchDeg: -90 });
-    passLines.push({ label: `East (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueEast, lines: east, pitchDeg: params.obliquePitch });
-    passLines.push({ label: `South (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueSouth, lines: south, pitchDeg: params.obliquePitch });
-    passLines.push({ label: `West (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueWest, lines: west, pitchDeg: params.obliquePitch });
-    passLines.push({ label: `North (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueNorth, lines: north, pitchDeg: params.obliquePitch });
+    const heights = await computeHeights(lines, params, dsmSampler);
+    folderInputs.push({
+      waypoints: flattenLines(lines, heights),
+      pitchDeg: -90,
+      speedMps: params.speedMps,
+      photoIntervalM: intervalM,
+      imageFormat: camera.imageFormat,
+      isSmartOblique: true,
+      lineBreaks: computeLineBreaks(lines),
+    });
+  } else if (isOblique && !usesSmartOblique) {
+    const passConfigs: { label: string; color: string; bearing: number; offsetBearing: number; pitch: number }[] = [
+      { label: "Nadir (-90°)", color: PASS_COLORS.nadir, bearing: params.courseDeg, offsetBearing: 0, pitch: -90 },
+      { label: `East (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueEast, bearing: params.courseDeg, offsetBearing: 90, pitch: params.obliquePitch },
+      { label: `South (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueSouth, bearing: perp, offsetBearing: 180, pitch: params.obliquePitch },
+      { label: `West (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueWest, bearing: params.courseDeg, offsetBearing: 270, pitch: params.obliquePitch },
+      { label: `North (${params.obliquePitch}°)`, color: PASS_COLORS.obliqueNorth, bearing: perp, offsetBearing: 0, pitch: params.obliquePitch },
+    ];
+
+    for (const cfg of passConfigs) {
+      const offset = cfg.pitch === -90 ? 0 : obliqueOffset;
+      const raw = cfg.pitch === -90
+        ? generateLines(polygon, cfg.bearing, spacingM, projector)
+        : withOffsetPass(polygon, cfg.bearing, spacingM, offset, cfg.offsetBearing);
+      const lines = maybeDensify(raw);
+      passLines.push({ label: cfg.label, color: cfg.color, lines, pitchDeg: cfg.pitch });
+      const heights = await computeHeights(lines, params, dsmSampler);
+      folderInputs.push({
+        waypoints: flattenLines(lines, heights),
+        pitchDeg: cfg.pitch,
+        speedMps: cfg.pitch === -90 ? params.speedMps : params.obliqueSpeedMps,
+        photoIntervalM: intervalM,
+        imageFormat: camera.imageFormat,
+        isSmartOblique: false,
+        lineBreaks: computeLineBreaks(lines),
+      });
+    }
   } else {
     const lines = maybeDensify(
       generateLines(polygon, params.courseDeg, spacingM, projector),
     );
-    waylineSet = [lines];
     passLines.push({ label: "Oblique + Smart", color: PASS_COLORS.smart, lines, pitchDeg: params.obliquePitch });
-  }
-
-  const flattenedWaylines: LonLatAlt[][] = [];
-  for (const lines of waylineSet) {
-    if (!lines.length) continue;
     const heights = await computeHeights(lines, params, dsmSampler);
-    flattenedWaylines.push(flattenLines(lines, heights));
+    folderInputs.push({
+      waypoints: flattenLines(lines, heights),
+      pitchDeg: params.obliquePitch,
+      speedMps: params.speedMps,
+      photoIntervalM: intervalM,
+      imageFormat: camera.imageFormat,
+      isSmartOblique: true,
+      lineBreaks: computeLineBreaks(lines),
+    });
   }
 
   const templateKml = buildTemplateKml(polygon, params, camera);
-  const { wpml, totalDistanceM } = buildWaylinesWpml(flattenedWaylines, params, camera);
+  const { wpml, totalDistanceM } = buildWaylinesWpml(folderInputs, params, camera);
 
   const stats = {
     nLines: passLines.reduce((acc, pass) => acc + pass.lines.length, 0),
-    nWaypoints: flattenedWaylines.reduce((acc, line) => acc + line.length, 0),
+    nWaypoints: folderInputs.reduce((acc, fi) => acc + fi.waypoints.length, 0),
     totalDistanceM,
     durationMin: totalDistanceM / params.speedMps / 60,
     nPhotosEstimate: Math.max(0, Math.trunc(routeDistance(passLines.flatMap((p) => p.lines)) / intervalM)),
@@ -169,4 +218,3 @@ export async function generateSurvey(
     templateKml,
   };
 }
-
