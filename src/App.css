@@ -136,6 +136,11 @@
   position: relative;
 }
 
+.bottom-row--waypoint {
+  height: clamp(260px, 36vh, 420px);
+  border-top: 1px solid var(--border-default);
+}
+
 .area-survey-bottom {
   display: flex;
   flex-direction: column;
@@ -694,6 +699,11 @@ tr:hover td {
   border-radius: 0;
   padding: 0;
   animation: workspaceReveal 0.25s ease-out;
+}
+
+.wp-workspace.controls {
+  width: 100%;
+  max-width: none;
 }
 
 @keyframes workspaceReveal {

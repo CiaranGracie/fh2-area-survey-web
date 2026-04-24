@@ -24,7 +24,7 @@ describe("buildTemplateKml", () => {
     expect(kml).toContain("<wpml:smartObliqueEnable>0</wpml:smartObliqueEnable>");
     expect(kml).toContain("<wpml:quickOrthoMappingEnable>0</wpml:quickOrthoMappingEnable>");
     expect(kml).toContain("<wpml:payloadParam>");
-    expect(kml).toContain("<wpml:imageFormat>visable</wpml:imageFormat>");
+    expect(kml).toContain("<wpml:imageFormat>visible</wpml:imageFormat>");
   });
 
   it("emits mapping2d with quickOrthoMappingEnable for ortho+smart", () => {
@@ -85,7 +85,7 @@ describe("buildWaylinesWpml", () => {
       pitchDeg: -90,
       speedMps: 12,
       photoIntervalM: 25,
-      imageFormat: "visable",
+      imageFormat: "visible",
       isSmartOblique: false,
       lineBreaks: [1],
       ...overrides,

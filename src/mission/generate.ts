@@ -1,4 +1,4 @@
-﻿import { CAMERAS } from "../domain/cameras";
+﻿import { CAMERAS, resolveCameraPayload } from "../domain/cameras";
 import type {
   LonLat,
   LonLatAlt,
@@ -12,6 +12,7 @@ import { projectorForLonLat } from "../geo/projection";
 import { buildTemplateKml, buildWaylinesWpml } from "./xmlBuilders";
 import type { WaylineFolderInput } from "./xmlBuilders";
 import type { DsmSampler } from "../terrain/dsm";
+import { mapHeightModeToExecuteMode } from "./waypointXmlBuilders";
 
 const PASS_COLORS = {
   nadir: "#3b82f6",
@@ -97,14 +98,15 @@ export async function generateSurvey(
 ): Promise<SurveyResult> {
   const camera = CAMERAS[params.cameraKey];
   if (!camera) throw new Error(`Unknown camera ${params.cameraKey}`);
+  const resolvedCamera = resolveCameraPayload(camera, params.selectedPayloadKey);
   if (polygon.length < 3) throw new Error("Polygon requires at least 3 points.");
 
   const centerLon = polygon.reduce((acc, pt) => acc + pt[0], 0) / polygon.length;
   const centerLat = polygon.reduce((acc, pt) => acc + pt[1], 0) / polygon.length;
   const projector = projectorForLonLat(centerLon, centerLat);
 
-  const spacingM = lineSpacingM(params.altitudeM, params.sideOverlapPct, camera);
-  const intervalM = photoIntervalM(params.altitudeM, params.forwardOverlapPct, camera);
+  const spacingM = lineSpacingM(params.altitudeM, params.sideOverlapPct, resolvedCamera);
+  const intervalM = photoIntervalM(params.altitudeM, params.forwardOverlapPct, resolvedCamera);
   const obliqueOffset =
     params.obliquePitch !== -90
       ? params.altitudeM / Math.tan((Math.abs(params.obliquePitch) * Math.PI) / 180)
@@ -117,6 +119,9 @@ export async function generateSurvey(
 
   const passLines: PassLine[] = [];
   const folderInputs: WaylineFolderInput[] = [];
+  const executeHeightMode = mapHeightModeToExecuteMode(
+    params.realTimeTerrainFollow ? "realTimeFollowSurface" : params.heightMode === "ALT" ? "relativeToStartPoint" : "EGM96",
+  );
 
   const maybeDensify = (input: LonLat[][]): LonLat[][] =>
     params.elevationOptimize ? addTerrainWaypoints(input, params.terrainIntervalM, projector) : input;
@@ -136,9 +141,10 @@ export async function generateSurvey(
       pitchDeg: -90,
       speedMps: params.speedMps,
       photoIntervalM: intervalM,
-      imageFormat: camera.imageFormat,
+      imageFormat: resolvedCamera.imageFormat,
       isSmartOblique: false,
       lineBreaks: computeLineBreaks(lines),
+      executeHeightMode,
     });
   } else if (isOrtho && usesSmartOblique) {
     const lines = maybeDensify(
@@ -151,9 +157,10 @@ export async function generateSurvey(
       pitchDeg: -90,
       speedMps: params.speedMps,
       photoIntervalM: intervalM,
-      imageFormat: camera.imageFormat,
+      imageFormat: resolvedCamera.imageFormat,
       isSmartOblique: true,
       lineBreaks: computeLineBreaks(lines),
+      executeHeightMode,
     });
   } else if (isOblique && !usesSmartOblique) {
     const passConfigs: { label: string; color: string; bearing: number; offsetBearing: number; pitch: number }[] = [
@@ -177,9 +184,10 @@ export async function generateSurvey(
         pitchDeg: cfg.pitch,
         speedMps: cfg.pitch === -90 ? params.speedMps : params.obliqueSpeedMps,
         photoIntervalM: intervalM,
-        imageFormat: camera.imageFormat,
+        imageFormat: resolvedCamera.imageFormat,
         isSmartOblique: false,
         lineBreaks: computeLineBreaks(lines),
+        executeHeightMode,
       });
     }
   } else {
@@ -193,14 +201,15 @@ export async function generateSurvey(
       pitchDeg: params.obliquePitch,
       speedMps: params.speedMps,
       photoIntervalM: intervalM,
-      imageFormat: camera.imageFormat,
+      imageFormat: resolvedCamera.imageFormat,
       isSmartOblique: true,
       lineBreaks: computeLineBreaks(lines),
+      executeHeightMode,
     });
   }
 
-  const templateKml = buildTemplateKml(surveyPolygon, params, camera);
-  const { wpml, totalDistanceM } = buildWaylinesWpml(folderInputs, params, camera);
+  const templateKml = buildTemplateKml(surveyPolygon, params, resolvedCamera);
+  const { wpml, totalDistanceM } = buildWaylinesWpml(folderInputs, params, resolvedCamera);
 
   const stats = {
     nLines: passLines.reduce((acc, pass) => acc + pass.lines.length, 0),
@@ -210,7 +219,7 @@ export async function generateSurvey(
     nPhotosEstimate: Math.max(0, Math.trunc(routeDistance(passLines.flatMap((p) => p.lines)) / intervalM)),
     lineSpacingM: spacingM,
     photoIntervalM: intervalM,
-    gsdCm: gsdCm(params.altitudeM, camera),
+    gsdCm: gsdCm(params.altitudeM, resolvedCamera),
     altitudeM: params.altitudeM,
     crsName: projector.info.name,
     epsg: projector.info.epsg,

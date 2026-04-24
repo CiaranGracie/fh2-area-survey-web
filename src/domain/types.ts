@@ -1,5 +1,9 @@
 ﻿export type HeightMode = "ASL" | "ALT" | "AGL";
 export type CollectionMode = "ortho" | "oblique";
+export type SurveyTemplateType = "mapping2d" | "mapping3d" | "mappingStrip";
+export type PositioningType = "GPS" | "RTKBaseStation" | "QianXun" | "Custom";
+export type RcLostMode = "goContinue" | "executeLostAction";
+export type RcLostAction = "goBack" | "landing" | "hover";
 
 export interface Camera {
   name: string;
@@ -10,14 +14,29 @@ export interface Camera {
   imageHeightPx: number;
   droneEnum: number;
   droneSubEnum: number;
-  payloadEnum: number;
+  payloadEnum: number | null;
   payloadSubEnum: number;
   imageFormat: string;
+  orientedCameraType: number;
+  payloadPositionIndex: 0 | 1 | 2;
+  supportsPayloadSwap: boolean;
+  isLidar: boolean;
+  isRtk: boolean;
+}
+
+export interface PayloadPreset {
+  name: string;
+  payloadEnum: number;
+  payloadSubEnum: number;
+  orientedCameraType?: number;
+  isLidar?: boolean;
 }
 
 export interface SurveyParams {
+  templateType: SurveyTemplateType;
   altitudeM: number;
   heightMode: HeightMode;
+  positioningType: PositioningType;
   terrainFollow: boolean;
   realTimeTerrainFollow: boolean;
   collectionMode: CollectionMode;
@@ -39,11 +58,24 @@ export interface SurveyParams {
   rthHeightM: number;
   transitSpeedMps: number;
   finishAction: "goHome" | "autoLand" | "goContinue" | "noAction";
+  exitOnRCLost: RcLostMode;
+  executeRCLostAction: RcLostAction;
   geozoneBypass: boolean;
   obstacleBypass: boolean;
   terrainIntervalM: number;
+  mappingHeadingMode: "followWayline" | "fixed";
+  mappingHeadingAngle: number;
+  payloadPositionIndex: 0 | 1 | 2;
+  selectedPayloadKey?: string;
   cameraKey: string;
   dsmFilename?: string;
+  singleLineEnable: boolean;
+  cuttingDistance: number;
+  boundaryOptimEnable: boolean;
+  leftExtend: number;
+  rightExtend: number;
+  includeCenterEnable: boolean;
+  stripUseTemplateAltitude: boolean;
 }
 
 export interface SurveyStats {
@@ -84,7 +116,13 @@ export type XY = [number, number];
 // Waypoint Route types
 // ---------------------------------------------------------------------------
 
-export type WaypointHeadingMode = "followWayline" | "fixed" | "manually";
+export type WaypointHeadingMode =
+  | "followWayline"
+  | "fixed"
+  | "manually"
+  | "smoothTransition"
+  | "towardPOI";
+export type WaypointHeadingPathMode = "followBadArc" | "clockwise" | "counterClockwise";
 
 export type WaypointTurnMode =
   | "toPointAndStopWithDiscontinuityCurvature"
@@ -92,7 +130,12 @@ export type WaypointTurnMode =
   | "toPointAndStopWithContinuityCurvature"
   | "toPointAndPassWithContinuityCurvature";
 
-export type WaypointHeightMode = "relativeToStartPoint" | "EGM96" | "aboveGroundLevel";
+export type WaypointHeightMode =
+  | "relativeToStartPoint"
+  | "EGM96"
+  | "aboveGroundLevel"
+  | "realTimeFollowSurface";
+export type WaypointGimbalPitchMode = "manual" | "usePointSetting";
 
 export interface WaypointActionParam {
   [key: string]: string | number | boolean | undefined;
@@ -112,7 +155,10 @@ export type WaypointActionType =
   | "timedIntervalShot"
   | "distanceIntervalShot"
   | "endIntervalShot"
-  | "recordCurrentAttitude";
+  | "recordCurrentAttitude"
+  | "gimbalEvenlyRotate"
+  | "recordPointCloud"
+  | "accurateShoot";
 
 export type InternalActionType =
   | "gimbalAngleLock"
@@ -128,7 +174,7 @@ export interface WaypointAction {
   id: string;
   type: WaypointActionType;
   params: WaypointActionParam;
-  triggerType?: "reachPoint" | "multipleTiming" | "multipleDistance";
+  triggerType?: "reachPoint" | "multipleTiming" | "multipleDistance" | "betweenAdjacentPoints";
   triggerParam?: number;
 }
 
@@ -141,9 +187,15 @@ export interface Waypoint {
   speed: number;
   headingMode: WaypointHeadingMode;
   headingAngle: number;
+  headingPathMode?: WaypointHeadingPathMode;
+  poiPoint?: [number, number, number];
+  poiIndex?: number;
   turnMode: WaypointTurnMode;
   turnDampingDist: number;
   useStraightLine: boolean;
+  payloadPositionIndex?: 0 | 1 | 2;
+  gimbalPitchAngle?: number;
+  gimbalYawAngle?: number;
   useGlobalHeight: boolean;
   useGlobalSpeed: boolean;
   useGlobalHeadingParam: boolean;
@@ -156,14 +208,24 @@ export interface WaypointRouteParams {
   defaultHeight: number;
   defaultSpeed: number;
   defaultHeadingMode: WaypointHeadingMode;
+  defaultHeadingPathMode: WaypointHeadingPathMode;
   defaultTurnMode: WaypointTurnMode;
+  gimbalPitchMode: WaypointGimbalPitchMode;
+  positioningType: PositioningType;
+  payloadPositionIndex: 0 | 1 | 2;
+  selectedPayloadKey?: string;
   takeoffHeightM: number;
   rthHeightM: number;
   transitSpeedMps: number;
   finishAction: "goHome" | "autoLand" | "goContinue" | "noAction";
+  exitOnRCLost: RcLostMode;
+  executeRCLostAction: RcLostAction;
   geozoneBypass: boolean;
   obstacleBypass: boolean;
   cameraKey: string;
+  startActionGroupEnabled: boolean;
+  startActionGroupPitch: number;
+  startActionGroupHoverSec: number;
 }
 
 export interface WaypointRouteResult {
@@ -173,5 +235,5 @@ export interface WaypointRouteResult {
   templateKml: string;
 }
 
-export type AppMode = "areaSurvey" | "waypointRoute";
+export type AppMode = "areaSurvey" | "waypointRoute" | "mappingStrip";
 

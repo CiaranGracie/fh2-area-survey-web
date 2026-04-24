@@ -154,6 +154,23 @@ function ActionParamEditor({
         </>
       );
 
+    case "gimbalEvenlyRotate":
+      return (
+        <label>
+          Target pitch (deg)
+          <input
+            type="number"
+            min={-90}
+            max={30}
+            value={Number(action.params.gimbalPitchRotateAngle ?? -45)}
+            onChange={(e) => {
+              onUpdate({ triggerType: "betweenAdjacentPoints" });
+              updateParam("gimbalPitchRotateAngle", Number(e.target.value));
+            }}
+          />
+        </label>
+      );
+
     case "zoom": {
       const BASE_FL = 24;
       const currentZoom = Math.round(Number(action.params.focalLength ?? BASE_FL) / BASE_FL);
@@ -282,6 +299,22 @@ function ActionParamEditor({
     case "recordCurrentAttitude":
       return null;
 
+    case "recordPointCloud":
+      return (
+        <label>
+          Operation
+          <select
+            value={String(action.params.operation ?? "startRecord")}
+            onChange={(e) => updateParam("operation", e.target.value)}
+          >
+            <option value="startRecord">Start</option>
+            <option value="pauseRecord">Pause</option>
+            <option value="resumeRecord">Resume</option>
+            <option value="stopRecord">Stop</option>
+          </select>
+        </label>
+      );
+
     default:
       return null;
   }
@@ -315,9 +348,10 @@ export function WaypointActionEditor({ actions, onChange, payloadEnum }: Props) 
     onChange(next);
   };
 
+  const isLidarPayload = payloadEnum === 68 || payloadEnum === 65534;
   const categories = PALETTE_CATEGORIES.map((cat) => ({
     ...cat,
-    types: ACTION_CATALOGUE.filter((a) => a.category === cat.key),
+    types: ACTION_CATALOGUE.filter((a) => a.category === cat.key && (!a.lidarOnly || isLidarPayload)),
   }));
 
   return (

@@ -1,9 +1,10 @@
-﻿import { useCallback, useState } from "react";
+﻿import { useCallback, useRef, useState } from "react";
 import "./App.css";
 import type { AppMode, LonLat, PassLine, SurveyResult, Waypoint, WaypointRouteResult } from "./domain/types";
 import { MapPreview } from "./ui/MapPreview";
 import { AreaSurveyPanel } from "./ui/AreaSurveyPanel";
 import { WaypointRoutePanel } from "./ui/WaypointRoutePanel";
+import { importKmzMission } from "./io/kmzImporter";
 
 function App() {
   const [appMode, setAppMode] = useState<AppMode>("areaSurvey");
@@ -14,9 +15,11 @@ function App() {
   const [passLabels, setPassLabels] = useState("No passes yet");
 
   const [wpMarkers, setWpMarkers] = useState<Waypoint[]>([]);
+  const [importedWaypoints, setImportedWaypoints] = useState<Waypoint[] | null>(null);
   const [selectedWpId, setSelectedWpId] = useState<string | null>(null);
   const [bottomPortalTarget, setBottomPortalTarget] = useState<HTMLDivElement | null>(null);
   const bottomRef = useCallback((node: HTMLDivElement | null) => setBottomPortalTarget(node), []);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const onAreaPolygonLoaded = (poly: LonLat[]) => {
     setPolygon(poly);
@@ -33,6 +36,7 @@ function App() {
 
   const onWaypointsLoaded = (waypoints: Waypoint[]) => {
     setWpMarkers(waypoints);
+    setImportedWaypoints(null);
     setPolygon(null);
     setPasses([]);
     setPassLabels("");
@@ -40,6 +44,35 @@ function App() {
 
   const onWaypointResultGenerated = (result: WaypointRouteResult) => {
     setWpMarkers(result.waypoints);
+    setImportedWaypoints(null);
+  };
+
+  const onImportKmz = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const imported = await importKmzMission(file);
+      setSelectedWpId(null);
+      if (imported.mode === "waypointRoute") {
+        setAppMode("waypointRoute");
+        const importedWps = imported.waypoints ?? [];
+        setWpMarkers(importedWps);
+        setImportedWaypoints(importedWps);
+        setPolygon(null);
+        setPasses([]);
+        setPassLabels(imported.riskyWaypointIndexes.length > 0
+          ? `Imported with ${imported.riskyWaypointIndexes.length} risky waypoint(s).`
+          : "Imported waypoint mission.");
+        return;
+      }
+      setAppMode(imported.mode);
+      setPolygon(imported.polygon ?? null);
+      setSurveyPolygon(imported.polygon ?? null);
+      setWpMarkers([]);
+      setPasses([]);
+      setPassLabels("Imported survey template.");
+    } catch (error) {
+      setPassLabels(error instanceof Error ? error.message : "Failed to import KMZ.");
+    }
   };
 
   return (
@@ -58,14 +91,33 @@ function App() {
             className={`btn ${appMode === "waypointRoute" ? "btn-primary" : "btn-secondary"}`}
             onClick={() => setAppMode("waypointRoute")}
           >Waypoint Route</button>
+          <button
+            className={`btn ${appMode === "mappingStrip" ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setAppMode("mappingStrip")}
+          >Mapping Strip</button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => importInputRef.current?.click()}
+          >Import KMZ</button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".kmz"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              void onImportKmz(e.target.files?.[0] ?? null);
+              e.currentTarget.value = "";
+            }}
+          />
         </div>
       </header>
 
       <div className="content-row">
-        {appMode === "areaSurvey" ? (
+        {appMode === "areaSurvey" || appMode === "mappingStrip" ? (
           <AreaSurveyPanel
             onPolygonLoaded={onAreaPolygonLoaded}
             onResultGenerated={onAreaResultGenerated}
+            initialTemplateType={appMode === "mappingStrip" ? "mappingStrip" : "mapping2d"}
           />
         ) : (
           <WaypointRoutePanel
@@ -74,6 +126,7 @@ function App() {
             selectedWpId={selectedWpId}
             onSelectedWpChange={setSelectedWpId}
             detailPortalTarget={bottomPortalTarget}
+            importedWaypoints={importedWaypoints}
           />
         )}
 
@@ -92,7 +145,7 @@ function App() {
         </section>
       </div>
 
-      <div className="bottom-row" ref={bottomRef}>
+      <div className={`bottom-row ${appMode === "waypointRoute" ? "bottom-row--waypoint" : ""}`} ref={bottomRef}>
         {appMode === "areaSurvey" && (
           <div className="area-survey-bottom">
             {passLabels && <p className="pass-labels">{passLabels}</p>}

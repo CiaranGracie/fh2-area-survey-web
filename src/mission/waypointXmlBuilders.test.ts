@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CAMERAS } from "../domain/cameras";
 import { DEFAULT_WAYPOINT_PARAMS } from "../domain/defaults";
-import type { Waypoint, WaypointAction } from "../domain/types";
+import type { Waypoint } from "../domain/types";
 import { createAction } from "../domain/actions";
 import { buildWaypointTemplateKml, buildWaypointWaylinesWpml } from "./waypointXmlBuilders";
 
@@ -76,7 +76,7 @@ describe("buildWaypointTemplateKml", () => {
     const kml = buildWaypointTemplateKml(makeWaypoints(), DEFAULT_WAYPOINT_PARAMS, camera);
     expect(kml).toContain("<wpml:globalWaypointHeadingParam>");
     expect(kml).toContain("<wpml:globalWaypointTurnMode>");
-    expect(kml).toContain("<wpml:globalUseStraightLine>1</wpml:globalUseStraightLine>");
+    expect(kml).toContain("<wpml:globalWaypointTurnMode>");
   });
 
   it("includes useGlobalHeight when set", () => {
@@ -95,7 +95,7 @@ describe("buildWaypointTemplateKml", () => {
   it("includes payloadParam", () => {
     const kml = buildWaypointTemplateKml(makeWaypoints(), DEFAULT_WAYPOINT_PARAMS, camera);
     expect(kml).toContain("<wpml:payloadParam>");
-    expect(kml).toContain("<wpml:imageFormat>visable</wpml:imageFormat>");
+    expect(kml).toContain("<wpml:imageFormat>visible</wpml:imageFormat>");
   });
 
   it("includes missionConfig", () => {

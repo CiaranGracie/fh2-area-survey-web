@@ -116,12 +116,12 @@ describe("parseKmlTextMulti", () => {
     }
   });
 
-  it("converts LineString vertices to points", () => {
+  it("parses LineString geometry", () => {
     const result = parseKmlTextMulti(LINESTRING_KML);
-    expect(result.type).toBe("points");
-    if (result.type === "points") {
-      expect(result.points).toHaveLength(3);
-      expect(result.points[0].name).toContain("Vertex");
+    expect(result.type).toBe("linestring");
+    if (result.type === "linestring") {
+      expect(result.line).toHaveLength(3);
+      expect(result.line[0][0]).toBeCloseTo(151.2, 4);
     }
   });
 

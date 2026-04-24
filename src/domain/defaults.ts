@@ -2,8 +2,10 @@
 import type { SurveyParams, WaypointRouteParams } from "./types";
 
 export const DEFAULT_PARAMS: SurveyParams = {
+  templateType: "mapping2d",
   altitudeM: 120,
   heightMode: "AGL",
+  positioningType: "GPS",
   terrainFollow: false,
   realTimeTerrainFollow: false,
   collectionMode: "ortho",
@@ -25,10 +27,23 @@ export const DEFAULT_PARAMS: SurveyParams = {
   rthHeightM: 100,
   transitSpeedMps: 15,
   finishAction: "goHome",
+  exitOnRCLost: "goContinue",
+  executeRCLostAction: "goBack",
   geozoneBypass: true,
   obstacleBypass: true,
   terrainIntervalM: 100,
+  mappingHeadingMode: "followWayline",
+  mappingHeadingAngle: 0,
+  payloadPositionIndex: 0,
   cameraKey: DEFAULT_CAMERA_KEY,
+  selectedPayloadKey: undefined,
+  singleLineEnable: false,
+  cuttingDistance: 200,
+  boundaryOptimEnable: true,
+  leftExtend: 50,
+  rightExtend: 50,
+  includeCenterEnable: false,
+  stripUseTemplateAltitude: true,
 };
 
 export const DEFAULT_WAYPOINT_PARAMS: WaypointRouteParams = {
@@ -36,13 +51,23 @@ export const DEFAULT_WAYPOINT_PARAMS: WaypointRouteParams = {
   defaultHeight: 80,
   defaultSpeed: 10,
   defaultHeadingMode: "followWayline",
+  defaultHeadingPathMode: "followBadArc",
   defaultTurnMode: "toPointAndStopWithDiscontinuityCurvature",
+  gimbalPitchMode: "manual",
+  positioningType: "GPS",
+  payloadPositionIndex: 0,
+  selectedPayloadKey: undefined,
   takeoffHeightM: 80,
   rthHeightM: 100,
   transitSpeedMps: 15,
   finishAction: "goHome",
+  exitOnRCLost: "goContinue",
+  executeRCLostAction: "goBack",
   geozoneBypass: true,
   obstacleBypass: true,
   cameraKey: DEFAULT_CAMERA_KEY,
+  startActionGroupEnabled: true,
+  startActionGroupPitch: -90,
+  startActionGroupHoverSec: 0.5,
 };
 

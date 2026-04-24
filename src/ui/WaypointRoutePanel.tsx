@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { CAMERAS } from "../domain/cameras";
+import { CAMERAS, getPayloadOptions, resolveCameraPayload } from "../domain/cameras";
 import { DEFAULT_WAYPOINT_PARAMS } from "../domain/defaults";
 import { getActionLabel } from "../domain/actions";
 import type {
   Waypoint,
   WaypointHeadingMode,
+  WaypointHeadingPathMode,
   WaypointRouteParams,
   WaypointRouteResult,
   WaypointTurnMode,
@@ -23,6 +24,7 @@ interface Props {
   selectedWpId: string | null;
   onSelectedWpChange: (id: string | null) => void;
   detailPortalTarget: HTMLDivElement | null;
+  importedWaypoints?: Waypoint[] | null;
 }
 
 const TURN_MODE_OPTIONS: { value: WaypointTurnMode; label: string }[] = [
@@ -36,6 +38,14 @@ const HEADING_MODE_OPTIONS: { value: WaypointHeadingMode; label: string }[] = [
   { value: "followWayline", label: "Along Route" },
   { value: "fixed", label: "Fixed heading" },
   { value: "manually", label: "Manual control" },
+  { value: "smoothTransition", label: "Smooth transition" },
+  { value: "towardPOI", label: "Toward POI" },
+];
+
+const HEADING_PATH_OPTIONS: { value: WaypointHeadingPathMode; label: string }[] = [
+  { value: "followBadArc", label: "Follow (DJI default)" },
+  { value: "clockwise", label: "Clockwise" },
+  { value: "counterClockwise", label: "Counter-clockwise" },
 ];
 
 export function WaypointRoutePanel({
@@ -44,6 +54,7 @@ export function WaypointRoutePanel({
   selectedWpId,
   onSelectedWpChange,
   detailPortalTarget,
+  importedWaypoints,
 }: Props) {
   const [params, setParams] = useState<WaypointRouteParams>(DEFAULT_WAYPOINT_PARAMS);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -52,6 +63,19 @@ export function WaypointRoutePanel({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Load a KML/KMZ with point features.");
   const [downloadName, setDownloadName] = useState("fh2_waypoint.kmz");
+  const selectedCamera = CAMERAS[params.cameraKey];
+  const effectiveCamera = selectedCamera
+    ? resolveCameraPayload(selectedCamera, params.selectedPayloadKey)
+    : undefined;
+  const payloadOptions = selectedCamera ? getPayloadOptions(selectedCamera) : [];
+
+  useEffect(() => {
+    if (!importedWaypoints) return;
+    setWaypoints(importedWaypoints);
+    setResult(null);
+    setMessage(`Loaded ${importedWaypoints.length} imported waypoints.`);
+    onSelectedWpChange(importedWaypoints.length > 0 ? importedWaypoints[0].id : null);
+  }, [importedWaypoints, onSelectedWpChange]);
 
   const onLoadPoints = async () => {
     if (!kmlFile) {
@@ -170,13 +194,34 @@ export function WaypointRoutePanel({
             Camera
             <select
               value={params.cameraKey}
-              onChange={(e) => setParams((p) => ({ ...p, cameraKey: e.target.value }))}
+              onChange={(e) =>
+                setParams((p) => {
+                  const nextCamera = CAMERAS[e.target.value];
+                  const nextPayload = nextCamera && nextCamera.supportsPayloadSwap
+                    ? (getPayloadOptions(nextCamera)[0]?.name ?? p.selectedPayloadKey)
+                    : undefined;
+                  return { ...p, cameraKey: e.target.value, selectedPayloadKey: nextPayload };
+                })
+              }
             >
               {Object.keys(CAMERAS).map((key) => (
                 <option key={key} value={key}>{key}</option>
               ))}
             </select>
           </label>
+          {selectedCamera?.supportsPayloadSwap && (
+            <label>
+              Payload
+              <select
+                value={params.selectedPayloadKey ?? payloadOptions[0]?.name ?? ""}
+                onChange={(e) => setParams((p) => ({ ...p, selectedPayloadKey: e.target.value }))}
+              >
+                {payloadOptions.map((option) => (
+                  <option key={option.name} value={option.name}>{option.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             Height mode
             <select
@@ -229,6 +274,31 @@ export function WaypointRoutePanel({
               {HEADING_MODE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
+            </select>
+          </label>
+          <label>
+            Heading path
+            <select
+              value={params.defaultHeadingPathMode}
+              onChange={(e) =>
+                setParams((p) => ({ ...p, defaultHeadingPathMode: e.target.value as WaypointHeadingPathMode }))
+              }
+            >
+              {HEADING_PATH_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Gimbal control
+            <select
+              value={params.gimbalPitchMode}
+              onChange={(e) =>
+                setParams((p) => ({ ...p, gimbalPitchMode: e.target.value as WaypointRouteParams["gimbalPitchMode"] }))
+              }
+            >
+              <option value="manual">Manual</option>
+              <option value="usePointSetting">Per-waypoint</option>
             </select>
           </label>
           <label>
@@ -298,6 +368,44 @@ export function WaypointRoutePanel({
               onChange={(e) => setParams((p) => ({ ...p, obstacleBypass: e.target.checked }))}
             />
           </label>
+          <label className="toggle-label">
+            Geozone bypass
+            <input
+              type="checkbox"
+              checked={params.geozoneBypass}
+              onChange={(e) => setParams((p) => ({ ...p, geozoneBypass: e.target.checked }))}
+            />
+          </label>
+          <label>
+            RC signal lost
+            <select
+              value={params.exitOnRCLost}
+              onChange={(e) =>
+                setParams((p) => ({ ...p, exitOnRCLost: e.target.value as WaypointRouteParams["exitOnRCLost"] }))
+              }
+            >
+              <option value="goContinue">Continue Mission</option>
+              <option value="executeLostAction">Execute Lost Action</option>
+            </select>
+          </label>
+          {params.exitOnRCLost === "executeLostAction" && (
+            <label>
+              Lost action
+              <select
+                value={params.executeRCLostAction}
+                onChange={(e) =>
+                  setParams((p) => ({
+                    ...p,
+                    executeRCLostAction: e.target.value as WaypointRouteParams["executeRCLostAction"],
+                  }))
+                }
+              >
+                <option value="goBack">Go Back</option>
+                <option value="landing">Land</option>
+                <option value="hover">Hover</option>
+              </select>
+            </label>
+          )}
         </div>
 
         <button className="btn btn-primary btn-cta" onClick={onGenerate} disabled={busy || waypoints.length === 0}>
@@ -417,7 +525,7 @@ export function WaypointRoutePanel({
                           ))}
                         </select>
                       </label>
-                      {selectedWp.headingMode === "fixed" && (
+                      {(selectedWp.headingMode === "fixed" || selectedWp.headingMode === "smoothTransition") && (
                         <label>
                           Heading angle
                           <input
@@ -433,6 +541,58 @@ export function WaypointRoutePanel({
                             }
                           />
                         </label>
+                      )}
+                      {(selectedWp.headingMode === "fixed" || selectedWp.headingMode === "smoothTransition") && (
+                        <label>
+                          Heading path
+                          <select
+                            value={selectedWp.headingPathMode ?? params.defaultHeadingPathMode}
+                            onChange={(e) =>
+                              updateWaypoint(selectedWp.id, {
+                                headingPathMode: e.target.value as WaypointHeadingPathMode,
+                                useGlobalHeadingParam: false,
+                              })
+                            }
+                          >
+                            {HEADING_PATH_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {selectedWp.headingMode === "towardPOI" && (
+                        <>
+                          <label>
+                            POI latitude
+                            <input
+                              type="number"
+                              value={selectedWp.poiPoint?.[0] ?? 0}
+                              onChange={(e) => {
+                                const lat = Number(e.target.value) || 0;
+                                const poi = selectedWp.poiPoint ?? [0, 0, 0];
+                                updateWaypoint(selectedWp.id, {
+                                  poiPoint: [lat, poi[1], poi[2]],
+                                  headingPathMode: selectedWp.headingPathMode ?? params.defaultHeadingPathMode,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label>
+                            POI longitude
+                            <input
+                              type="number"
+                              value={selectedWp.poiPoint?.[1] ?? 0}
+                              onChange={(e) => {
+                                const lon = Number(e.target.value) || 0;
+                                const poi = selectedWp.poiPoint ?? [0, 0, 0];
+                                updateWaypoint(selectedWp.id, {
+                                  poiPoint: [poi[0], lon, poi[2]],
+                                  headingPathMode: selectedWp.headingPathMode ?? params.defaultHeadingPathMode,
+                                });
+                              }}
+                            />
+                          </label>
+                        </>
                       )}
                       <label className="toggle-label">
                         Straight line
@@ -538,22 +698,86 @@ export function WaypointRoutePanel({
                             {TURN_MODE_OPTIONS.find((o) => o.value === params.defaultTurnMode)?.label ?? params.defaultTurnMode} (default)
                           </span>
                         ) : (
-                          <select
-                            className="wp-override-input"
-                            value={selectedWp.turnMode}
-                            onChange={(e) =>
-                              updateWaypoint(selectedWp.id, {
-                                turnMode: e.target.value as WaypointTurnMode,
-                                useGlobalTurnParam: false,
-                              })
-                            }
-                          >
-                            {TURN_MODE_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
+                          <>
+                            <select
+                              className="wp-override-input"
+                              value={selectedWp.turnMode}
+                              onChange={(e) =>
+                                updateWaypoint(selectedWp.id, {
+                                  turnMode: e.target.value as WaypointTurnMode,
+                                  useGlobalTurnParam: false,
+                                })
+                              }
+                            >
+                              {TURN_MODE_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                            {selectedWp.turnMode === "coordinateTurn" && (
+                              <input
+                                type="number"
+                                className="wp-override-input"
+                                min={0.2}
+                                step={0.1}
+                                value={selectedWp.turnDampingDist}
+                                onChange={(e) =>
+                                  updateWaypoint(selectedWp.id, {
+                                    turnDampingDist: Number(e.target.value) || 0.2,
+                                    useGlobalTurnParam: false,
+                                  })
+                                }
+                                placeholder="Damping (m)"
+                              />
+                            )}
+                          </>
                         )}
                       </div>
+                      {selectedWp.turnMode === "coordinateTurn" && selectedWpIndex >= 0 && selectedWpIndex < waypoints.length - 1 && (
+                        <p className="stats-empty">
+                          {(() => {
+                            const next = waypoints[selectedWpIndex + 1];
+                            if (!next) return "Coordinate turn enabled.";
+                            const dLat = next.coordinates[1] - selectedWp.coordinates[1];
+                            const dLon = next.coordinates[0] - selectedWp.coordinates[0];
+                            const latRad = (selectedWp.coordinates[1] * Math.PI) / 180;
+                            const distance = Math.hypot(
+                              dLon * (Math.PI / 180) * 6371000 * Math.cos(latRad),
+                              dLat * (Math.PI / 180) * 6371000,
+                            );
+                            return distance <= selectedWp.turnDampingDist * 2
+                              ? "Warning: segment distance may be too short for this damping value."
+                              : "Coordinate turn damping is valid for next segment.";
+                          })()}
+                        </p>
+                      )}
+                      {params.gimbalPitchMode === "usePointSetting" && (
+                        <div className="grid2">
+                          <label>
+                            Gimbal pitch
+                            <input
+                              type="number"
+                              value={selectedWp.gimbalPitchAngle ?? -90}
+                              onChange={(e) =>
+                                updateWaypoint(selectedWp.id, {
+                                  gimbalPitchAngle: Number(e.target.value) || -90,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Gimbal yaw
+                            <input
+                              type="number"
+                              value={selectedWp.gimbalYawAngle ?? 0}
+                              onChange={(e) =>
+                                updateWaypoint(selectedWp.id, {
+                                  gimbalYawAngle: Number(e.target.value) || 0,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -571,7 +795,7 @@ export function WaypointRoutePanel({
                     <WaypointActionEditor
                       actions={selectedWp.actions}
                       onChange={(actions) => updateWaypoint(selectedWp.id, { actions })}
-                      payloadEnum={CAMERAS[params.cameraKey]?.payloadEnum ?? 98}
+                      payloadEnum={effectiveCamera?.payloadEnum ?? 98}
                     />
                   </div>
                 </div>

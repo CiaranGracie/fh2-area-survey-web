@@ -10,6 +10,7 @@ export interface KmlPoint {
 export type KmlParseResult =
   | { type: "polygon"; polygon: LonLat[] }
   | { type: "points"; points: KmlPoint[] }
+  | { type: "linestring"; line: LonLat[] }
   | { type: "both"; polygon: LonLat[]; points: KmlPoint[] };
 
 function parseCoordinateText(text: string): LonLat[] {
@@ -126,15 +127,34 @@ function extractLineStringVertices(doc: Document): KmlPoint[] {
   return points;
 }
 
+function extractLineString(doc: Document): LonLat[] | null {
+  const lineStrings = Array.from(doc.getElementsByTagName("LineString"));
+  for (const ls of lineStrings) {
+    const coordEl = ls.getElementsByTagName("coordinates")[0];
+    if (!coordEl?.textContent) continue;
+    const vertices = coordEl.textContent
+      .trim()
+      .split(/\s+/)
+      .map((part) => {
+        const [lonStr, latStr] = part.split(",");
+        return [Number(lonStr), Number(latStr)] as LonLat;
+      })
+      .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
+    if (vertices.length >= 2) return vertices;
+  }
+  return null;
+}
+
 export function parseKmlTextMulti(kmlText: string): KmlParseResult {
   const doc = new DOMParser().parseFromString(kmlText, "application/xml");
   const parserError = doc.querySelector("parsererror");
   if (parserError) throw new Error("Invalid KML XML.");
 
   const polygon = extractPolygonCoordinates(doc);
+  const line = extractLineString(doc);
   let points = extractPointPlacemarks(doc);
 
-  if (points.length === 0) {
+  if (points.length === 0 && !line) {
     points = extractLineStringVertices(doc);
   }
 
@@ -143,6 +163,9 @@ export function parseKmlTextMulti(kmlText: string): KmlParseResult {
   }
   if (polygon) {
     return { type: "polygon", polygon };
+  }
+  if (line) {
+    return { type: "linestring", line };
   }
   if (points.length > 0) {
     return { type: "points", points };
@@ -154,6 +177,9 @@ export function parseKmlText(kmlText: string): LonLat[] {
   const result = parseKmlTextMulti(kmlText);
   if (result.type === "points") {
     throw new Error("KML contains points but no polygon. Use Waypoint Route mode.");
+  }
+  if (result.type === "linestring") {
+    throw new Error("KML contains a line but no polygon. Use Mapping Strip mode.");
   }
   return result.type === "polygon" ? result.polygon : result.polygon;
 }

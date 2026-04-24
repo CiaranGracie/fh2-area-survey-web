@@ -46,7 +46,11 @@ export function buildTemplateKml(
     AGL: params.realTimeTerrainFollow ? "realTimeFollowSurface" : "EGM96",
   };
 
-  const templateType = mode.obliquePlain ? "mapping3d" : "mapping2d";
+  const templateType = params.templateType === "mappingStrip"
+    ? "mappingStrip"
+    : mode.obliquePlain
+      ? "mapping3d"
+      : "mapping2d";
 
   const aglLines: string[] = [];
   if (params.heightMode === "AGL") {
@@ -98,14 +102,22 @@ export function buildTemplateKml(
   }
 
   const payloadParam = `      <wpml:payloadParam>
-        <wpml:payloadPositionIndex>0</wpml:payloadPositionIndex>
+        <wpml:payloadPositionIndex>${params.payloadPositionIndex}</wpml:payloadPositionIndex>
         <wpml:imageFormat>${camera.imageFormat}</wpml:imageFormat>
         <wpml:dewarpingEnable>0</wpml:dewarpingEnable>
         <wpml:returnMode>singleReturnFirst</wpml:returnMode>
         <wpml:samplingRate>0</wpml:samplingRate>
         <wpml:scanningMode>repetitive</wpml:scanningMode>
         <wpml:modelColoringEnable>0</wpml:modelColoringEnable>
+${camera.isLidar ? `        <wpml:orthoLidarOverlapH>${params.forwardOverlapPct}</wpml:orthoLidarOverlapH>
+        <wpml:orthoLidarOverlapW>${params.sideOverlapPct}</wpml:orthoLidarOverlapW>
+        <wpml:inclinedLidarOverlapH>${params.obliqueForwardOverlapPct}</wpml:inclinedLidarOverlapH>
+        <wpml:inclinedLidarOverlapW>${params.obliqueSideOverlapPct}</wpml:inclinedLidarOverlapW>` : ""}
       </wpml:payloadParam>`;
+  const mappingHeadingParam = `        <wpml:mappingHeadingParam>
+          <wpml:mappingHeadingMode>${params.mappingHeadingMode}</wpml:mappingHeadingMode>
+${params.mappingHeadingMode === "fixed" ? `          <wpml:mappingHeadingAngle>${params.mappingHeadingAngle}</wpml:mappingHeadingAngle>` : ""}
+        </wpml:mappingHeadingParam>`;
 
   return `${KML_HEADER}
     <wpml:author>RocketDNA Survey Generator (Web)</wpml:author>
@@ -123,6 +135,7 @@ ${aglLines.length > 0 ? aglLines.join("\n") + "\n" : ""}      </wpml:waylineCoor
       <wpml:autoFlightSpeed>${params.speedMps}</wpml:autoFlightSpeed>
       <Placemark>
 ${placemarkLines.join("\n")}
+${mappingHeadingParam}
         <wpml:overlap>
 ${overlapLines.join("\n")}
         </wpml:overlap>
@@ -347,13 +360,14 @@ export interface WaylineFolderInput {
   imageFormat: string;
   isSmartOblique: boolean;
   lineBreaks: number[];
+  executeHeightMode?: string;
 }
 
 function buildStandardCaptureFolder(
   waylineId: number,
   input: WaylineFolderInput,
 ): { xml: string; distanceM: number } {
-  const { waypoints, pitchDeg, speedMps, photoIntervalM, imageFormat } = input;
+  const { waypoints, pitchDeg, speedMps, photoIntervalM, imageFormat, executeHeightMode } = input;
   if (waypoints.length === 0) return { xml: "", distanceM: 0 };
 
   let distanceM = 0;
@@ -422,7 +436,7 @@ function buildStandardCaptureFolder(
 
   const xml = `    <Folder>
       <wpml:templateId>0</wpml:templateId>
-      <wpml:executeHeightMode>WGS84</wpml:executeHeightMode>
+      <wpml:executeHeightMode>${executeHeightMode ?? "WGS84"}</wpml:executeHeightMode>
       <wpml:waylineId>${waylineId}</wpml:waylineId>
       <wpml:distance>${distanceM.toFixed(6)}</wpml:distance>
       <wpml:duration>${(distanceM / speedMps).toFixed(6)}</wpml:duration>
@@ -437,7 +451,7 @@ function buildSmartObliqueFolder(
   waylineId: number,
   input: WaylineFolderInput,
 ): { xml: string; distanceM: number } {
-  const { waypoints, pitchDeg, speedMps, lineBreaks } = input;
+  const { waypoints, pitchDeg, speedMps, lineBreaks, executeHeightMode } = input;
   if (waypoints.length === 0) return { xml: "", distanceM: 0 };
 
   let distanceM = 0;
@@ -516,7 +530,7 @@ function buildSmartObliqueFolder(
 
   const xml = `    <Folder>
       <wpml:templateId>0</wpml:templateId>
-      <wpml:executeHeightMode>WGS84</wpml:executeHeightMode>
+      <wpml:executeHeightMode>${executeHeightMode ?? "WGS84"}</wpml:executeHeightMode>
       <wpml:waylineId>${waylineId}</wpml:waylineId>
       <wpml:distance>${distanceM.toFixed(6)}</wpml:distance>
       <wpml:duration>${(distanceM / speedMps).toFixed(6)}</wpml:duration>

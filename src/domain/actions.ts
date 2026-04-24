@@ -7,8 +7,9 @@ export interface ActionCatalogueEntry {
   label: string;
   category: ActionCategory;
   hasLens: boolean;
+  lidarOnly?: boolean;
   defaultParams: WaypointActionParam;
-  defaultTriggerType?: "multipleTiming" | "multipleDistance";
+  defaultTriggerType?: "reachPoint" | "multipleTiming" | "multipleDistance" | "betweenAdjacentPoints";
   defaultTriggerParam?: number;
 }
 
@@ -101,6 +102,17 @@ export const ACTION_CATALOGUE: ActionCatalogueEntry[] = [
     },
   },
   {
+    type: "gimbalEvenlyRotate",
+    label: "Gimbal Even Rotate",
+    category: "camera",
+    hasLens: false,
+    defaultParams: {
+      gimbalPitchRotateAngle: -45,
+      payloadPositionIndex: 0,
+    },
+    defaultTriggerType: "betweenAdjacentPoints",
+  },
+  {
     type: "zoom",
     label: "Camera Zoom",
     category: "camera",
@@ -152,6 +164,17 @@ export const ACTION_CATALOGUE: ActionCatalogueEntry[] = [
   },
 
   // -- Aircraft --
+  {
+    type: "recordPointCloud",
+    label: "Record Point Cloud",
+    category: "capture",
+    hasLens: false,
+    lidarOnly: true,
+    defaultParams: {
+      operation: "startRecord",
+      payloadPositionIndex: 0,
+    },
+  },
   {
     type: "rotateYaw",
     label: "Aircraft Yaw",

@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CAMERAS } from "../domain/cameras";
+import { CAMERAS, getPayloadOptions } from "../domain/cameras";
 import { DEFAULT_PARAMS } from "../domain/defaults";
 import type { LonLat, SurveyParams, SurveyResult } from "../domain/types";
 import { altitudeFromGsd, gsdCm } from "../geo/math";
 import { buildKmzBlob, triggerBlobDownload } from "../io/kmzWriter";
-import { parseKmlOrKmzFile } from "../io/kml";
+import { parseKmlOrKmzFileMulti } from "../io/kml";
 import { generateSurvey } from "../mission/generate";
 import { createDsmSampler } from "../terrain/dsm";
 import type { DsmSampler } from "../terrain/dsm";
+import { projectorForLonLat } from "../geo/projection";
+import { corridorPolygonFromLine } from "../geo/strip";
 
 type NumberParamKey =
   | "altitudeM"
@@ -25,14 +27,19 @@ type NumberParamKey =
   | "terrainIntervalM"
   | "takeoffHeightM"
   | "rthHeightM"
-  | "transitSpeedMps";
+  | "transitSpeedMps"
+  | "mappingHeadingAngle"
+  | "leftExtend"
+  | "rightExtend"
+  | "cuttingDistance";
 
 interface Props {
   onPolygonLoaded: (polygon: LonLat[]) => void;
   onResultGenerated: (result: SurveyResult) => void;
+  initialTemplateType?: SurveyParams["templateType"];
 }
 
-export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
+export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated, initialTemplateType }: Props) {
   const [params, setParams] = useState<SurveyParams>(DEFAULT_PARAMS);
   const [polygon, setPolygon] = useState<LonLat[] | null>(null);
   const [surveyResult, setSurveyResult] = useState<SurveyResult | null>(null);
@@ -46,6 +53,13 @@ export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
   );
   const syncingFromGsdRef = useRef(false);
   const dsmSamplerRef = useRef<DsmSampler | undefined>(undefined);
+  useEffect(() => {
+    if (!initialTemplateType) return;
+    setParams((prev) => ({ ...prev, templateType: initialTemplateType }));
+  }, [initialTemplateType]);
+
+  const selectedCamera = CAMERAS[params.cameraKey];
+  const payloadOptions = selectedCamera ? getPayloadOptions(selectedCamera) : [];
 
   const mode = useMemo(() => {
     const isOrtho = params.collectionMode === "ortho";
@@ -175,7 +189,18 @@ export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
     }
     try {
       setBusy(true);
-      const poly = await parseKmlOrKmzFile(kmlFile);
+      const parsed = await parseKmlOrKmzFileMulti(kmlFile);
+      let poly: LonLat[];
+      if (parsed.type === "polygon" || parsed.type === "both") {
+        poly = parsed.polygon;
+      } else if (parsed.type === "linestring") {
+        const center = parsed.line[Math.floor(parsed.line.length / 2)];
+        const projector = projectorForLonLat(center[0], center[1]);
+        poly = corridorPolygonFromLine(parsed.line, projector, params.leftExtend, params.rightExtend);
+        setParams((prev) => ({ ...prev, templateType: "mappingStrip" }));
+      } else {
+        throw new Error("KML contains points but no polygon. Use Waypoint Route mode.");
+      }
       setPolygon(poly);
       setSurveyResult(null);
       onPolygonLoaded(poly);
@@ -261,11 +286,41 @@ export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
           Camera
           <select
             value={params.cameraKey}
-            onChange={(e) => updateString("cameraKey", e.target.value)}
+            onChange={(e) =>
+              setParams((prev) => {
+                const next = CAMERAS[e.target.value];
+                const nextPayload = next?.supportsPayloadSwap ? (getPayloadOptions(next)[0]?.name ?? prev.selectedPayloadKey) : undefined;
+                return { ...prev, cameraKey: e.target.value, selectedPayloadKey: nextPayload };
+              })
+            }
           >
             {Object.keys(CAMERAS).map((key) => (
               <option key={key} value={key}>{key}</option>
             ))}
+          </select>
+        </label>
+        {selectedCamera?.supportsPayloadSwap && (
+          <label>
+            Payload
+            <select
+              value={params.selectedPayloadKey ?? payloadOptions[0]?.name ?? ""}
+              onChange={(e) => updateString("selectedPayloadKey", e.target.value)}
+            >
+              {payloadOptions.map((option) => (
+                <option key={option.name} value={option.name}>{option.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Template
+          <select
+            value={params.templateType}
+            onChange={(e) => updateString("templateType", e.target.value as SurveyParams["templateType"])}
+          >
+            <option value="mapping2d">Mapping 2D</option>
+            <option value="mapping3d">Mapping 3D</option>
+            <option value="mappingStrip">Mapping Strip</option>
           </select>
         </label>
         <label>
@@ -508,6 +563,45 @@ export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
             />
           </label>
         </div>
+        {params.templateType === "mappingStrip" && (
+          <div className="grid2">
+            <label>
+              Left extend (m)
+              <input
+                type="number"
+                min={0}
+                value={params.leftExtend}
+                onChange={(e) => updateNumber("leftExtend", e.target.value)}
+              />
+            </label>
+            <label>
+              Right extend (m)
+              <input
+                type="number"
+                min={0}
+                value={params.rightExtend}
+                onChange={(e) => updateNumber("rightExtend", e.target.value)}
+              />
+            </label>
+            <label>
+              Cutting distance (m)
+              <input
+                type="number"
+                min={0}
+                value={params.cuttingDistance}
+                onChange={(e) => updateNumber("cuttingDistance", e.target.value)}
+              />
+            </label>
+            <label className="toggle-label">
+              Single line
+              <input
+                type="checkbox"
+                checked={params.singleLineEnable}
+                onChange={(e) => updateString("singleLineEnable", e.target.checked)}
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       <button className="btn btn-primary btn-cta" onClick={onGenerate} disabled={busy || !polygon}>
@@ -568,6 +662,53 @@ export function AreaSurveyPanel({ onPolygonLoaded, onResultGenerated }: Props) {
             onChange={(e) => updateString("obstacleBypass", e.target.checked)}
           />
         </label>
+        <label>
+          RC signal lost
+          <select
+            value={params.exitOnRCLost}
+            onChange={(e) => updateString("exitOnRCLost", e.target.value as SurveyParams["exitOnRCLost"])}
+          >
+            <option value="goContinue">Continue Mission</option>
+            <option value="executeLostAction">Execute Lost Action</option>
+          </select>
+        </label>
+        {params.exitOnRCLost === "executeLostAction" && (
+          <label>
+            Lost action
+            <select
+              value={params.executeRCLostAction}
+              onChange={(e) => updateString("executeRCLostAction", e.target.value as SurveyParams["executeRCLostAction"])}
+            >
+              <option value="goBack">Go Back</option>
+              <option value="landing">Land</option>
+              <option value="hover">Hover</option>
+            </select>
+          </label>
+        )}
+      </div>
+
+      <h3>Aircraft Heading</h3>
+      <div className="control-group grid2">
+        <label>
+          Heading mode
+          <select
+            value={params.mappingHeadingMode}
+            onChange={(e) => updateString("mappingHeadingMode", e.target.value as SurveyParams["mappingHeadingMode"])}
+          >
+            <option value="followWayline">Follow Flight Line</option>
+            <option value="fixed">Fixed Heading</option>
+          </select>
+        </label>
+        {params.mappingHeadingMode === "fixed" && (
+          <label>
+            Heading angle (deg)
+            <input
+              type="number"
+              value={params.mappingHeadingAngle}
+              onChange={(e) => updateNumber("mappingHeadingAngle", e.target.value)}
+            />
+          </label>
+        )}
       </div>
 
       <h3>Export</h3>
